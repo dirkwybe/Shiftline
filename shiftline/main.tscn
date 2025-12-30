@@ -1,0 +1,204 @@
+[gd_scene load_steps=8 format=3 uid="uid://c5ufopo7w0an7"]
+
+[ext_resource type="Script" uid="uid://derteuj2kyg75" path="res://Game.gd" id="1_ig7tw"]
+[ext_resource type="AudioStream" uid="uid://dnsv0qj04cjq" path="res://assets/sounds/slide.mp3" id="2_0xm2m"]
+[ext_resource type="AudioStream" uid="uid://dhi720sc7db6r" path="res://assets/sounds/lock.mp3" id="3_1bvp3"]
+[ext_resource type="AudioStream" uid="uid://tsc57wlu34lo" path="res://assets/sounds/win.mp3" id="4_lquwl"]
+[ext_resource type="AudioStream" uid="uid://c1fg5aictfcep" path="res://assets/sounds/nosolution.mp3" id="5_lquwl"]
+[ext_resource type="Texture2D" uid="uid://rqgpjr56kn2k" path="res://assets/tiles/tile_base.svg" id="6_272bh"]
+[ext_resource type="Texture2D" uid="uid://hbdbyqkmpug6" path="res://assets/tiles/wall_block2.svg" id="7_272bh"]
+
+[node name="Main" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_ig7tw")
+sfx_move = ExtResource("2_0xm2m")
+sfx_lock = ExtResource("3_1bvp3")
+sfx_win = ExtResource("4_lquwl")
+sfx_no_solution = ExtResource("5_lquwl")
+tile_texture = ExtResource("6_272bh")
+wall_texture = ExtResource("7_272bh")
+about_text = "Shiftline is a sliding puzzle about
+matching colors and finding order.
+Made for iOS.
+
+If you have any questions or feedback, please send an email to Dirk: dirkwybe@gmail.com"
+wall_tint = Color(0.6943767, 0.6948095, 0.74558616, 1)
+wall_tint_contrast = Color(0.25148505, 0.25146875, 0.292691, 1)
+
+[node name="Background" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="StartPanel" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="StartBackdrop" type="TextureRect" parent="StartPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+stretch_mode = 1
+
+[node name="StartLayout" type="VBoxContainer" parent="StartPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 12
+
+[node name="StartTitle" type="RichTextLabel" parent="StartPanel/StartLayout"]
+custom_minimum_size = Vector2(0, 180)
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_font_sizes/normal_font_size = 64
+bbcode_enabled = true
+text = "[center][color=#6ED3FF]S[/color][color=#6BFFA0]h[/color][color=#F9D56E]i[/color][color=#FF7A7A]f[/color][color=#B76DFF]t[/color][color=#6ED3FF]l[/color][color=#6BFFA0]i[/color][color=#F9D56E]n[/color][color=#FF7A7A]e[/color][/center]"
+fit_content = true
+scroll_active = false
+
+[node name="StartSpacer" type="Control" parent="StartPanel/StartLayout"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="StartBox" type="PanelContainer" parent="StartPanel/StartLayout"]
+custom_minimum_size = Vector2(300, 260)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+
+[node name="StartVBox" type="VBoxContainer" parent="StartPanel/StartLayout/StartBox"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="StartPlayButton" type="Button" parent="StartPanel/StartLayout/StartBox/StartVBox"]
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+text = "Play"
+
+[node name="StartOptionsButton" type="Button" parent="StartPanel/StartLayout/StartBox/StartVBox"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+text = "Options"
+
+[node name="StartAboutButton" type="Button" parent="StartPanel/StartLayout/StartBox/StartVBox"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+text = "About"
+
+[node name="StartHowToButton" type="Button" parent="StartPanel/StartLayout/StartBox/StartVBox"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+text = "How To Play"
+
+[node name="StartBottomSpacer" type="Control" parent="StartPanel/StartLayout"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="SafeArea" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="VBoxContainer" type="VBoxContainer" parent="SafeArea"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="TopBar" type="VBoxContainer" parent="SafeArea/VBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+theme_override_constants/separation = 4
+
+[node name="HeaderLabel" type="Label" parent="SafeArea/VBoxContainer/TopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Stage 1-1"
+
+[node name="SubHeaderLabel" type="Label" parent="SafeArea/VBoxContainer/TopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Moves: 0"
+
+[node name="CenterContainer" type="CenterContainer" parent="SafeArea/VBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="GridContainer" type="GridContainer" parent="SafeArea/VBoxContainer/CenterContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+
+[node name="DevPanel" type="CenterContainer" parent="SafeArea/VBoxContainer"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+
+[node name="DevPanelHBox" type="HBoxContainer" parent="SafeArea/VBoxContainer/DevPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="DevDifficultyLabel" type="Label" parent="SafeArea/VBoxContainer/DevPanel/DevPanelHBox"]
+layout_mode = 2
+text = "Difficulty"
+
+[node name="DevDifficultyOption" type="OptionButton" parent="SafeArea/VBoxContainer/DevPanel/DevPanelHBox"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+
+[node name="NextLevelWrap" type="CenterContainer" parent="SafeArea/VBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+
+[node name="NewLevelButton" type="Button" parent="SafeArea/VBoxContainer/NextLevelWrap"]
+layout_mode = 2
+size_flags_vertical = 4
+text = "Next Level"
+
+[node name="HBoxContainer" type="HBoxContainer" parent="SafeArea/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 6
+
+[node name="RestartButton" type="Button" parent="SafeArea/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 4
+text = "Restart"
+
+[node name="SolveButton" type="Button" parent="SafeArea/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 4
+text = "Solve"
+
+[node name="StatusLabel" type="Label" parent="SafeArea/VBoxContainer"]
+layout_mode = 2
+horizontal_alignment = 1

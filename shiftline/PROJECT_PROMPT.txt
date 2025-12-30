@@ -1,0 +1,125 @@
+Shiftline - Godot 4 iOS Puzzle Game (Full Project Prompt)
+
+Goal
+Build a polished, portrait-first iOS puzzle game in Godot 4 using a single main script (GDScript) and a single main scene. The game is a grid-based sliding puzzle with colored blocks, walls, and colored holes. Players swipe to slide a row or column; blocks slide until they hit a wall or a locked block. Match blocks to same-colored holes to lock them. Lock all blocks to win. Include stages/levels UI, settings, hint/solve, and dev tools.
+
+Core Gameplay
+- Board: grid (currently 8x8).
+- Tiles: each cell can be empty (-1), block (color_id), wall, or hole (color_id).
+- Swipe: horizontal/vertical swipe on grid moves the touched row/column by sliding blocks until blocked (no timing).
+- Locked blocks: if a block lands on a same-colored hole, it locks and becomes immovable.
+- Win: all holes are filled with correct colored blocks and locked.
+- Moves: track moves made; optional move limit can be added later.
+
+Rendering
+- Use Control-based grid with ColorRect/TextureRect tiles.
+- Block texture: res://assets/tiles/tile_base.svg
+- Wall texture: res://assets/tiles/wall_block.svg (tinted by exported color)
+- Holes: inset bevel effect using two layered ColorRects (outer darker ring + inner lighter center).
+- Solved block indicators:
+  - Subtle pulse by modulating the block texture.
+  - Bright star decal centered on the block.
+- Optional confetti win celebration over the grid, and centered "Stage Clear!" banner with semi-transparent background.
+
+Input
+- Touch press + release to determine swipe direction.
+- Ignore small swipes (<20 px).
+- Input locked during animations or solution playback.
+
+Animation
+- Row/column sliding uses tweened ghost tiles.
+- Update model after tween completes.
+- Lock input during animation.
+- Optional haptics: light on move, strong on win (iOS/Android only).
+
+Levels and Data
+- Levels stored as JSON in res://levels/level_XX.json (1..100).
+- JSON schema:
+  - width, height
+  - palette: array of color hex strings
+  - walls: array of [x,y]
+  - blocks: array of { pos:[x,y], color:int }
+  - holes: array of { pos:[x,y], color:int }
+  - difficulty (1..5)
+  - difficulty_label (string)
+  - optional theme_name, level_name, theme_texture
+- Levels are ordered into 10 stages of 10 levels:
+  - Stage 1: 4 very easy, 4 easy, 2 challenging
+  - Stages 2-10: 5 challenging, 4 hard, 1 very hard
+- Stage select and level select respect unlock rules (complete previous stage to unlock next).
+- "Solve" button is dev-only; "Hint" is always available.
+
+UI/Scenes
+Main.tscn (single scene) with:
+- Background TextureRect
+- SafeArea/VBoxContainer:
+  - TopBar (HeaderLabel + SubHeaderLabel)
+  - Grid CenterContainer
+  - NextLevel button centered between grid and bottom bar
+  - Bottom HBoxContainer with Restart, Solve (dev), Hint, Stages, Home, Options (hidden outside home)
+  - StatusLabel
+- Start (Home) screen:
+  - Fullscreen background image (home_screen.svg)
+  - Title with multi-colored letters (RichTextLabel)
+  - Centered buttons: Play, Options, About, How To Play
+- Stage Select screen:
+  - Colored rounded cards, 2-column grid
+  - Centered rainbow title
+  - Home button at bottom center
+- Level Select screen:
+  - Same style as stage select
+  - Centered rainbow title, colored buttons
+  - Home button at bottom center
+- About screen:
+  - Same background as home
+  - Rainbow title, centered RichText body
+  - Home button at bottom
+- How To Play screen:
+  - Same style as About
+  - Editable RichText body
+- Options screen:
+  - CheckButtons: High Contrast, Large Tiles, Sound
+  - Reset Progress button (with confirmation popup)
+  - Home button at bottom
+- Reset confirmation popup:
+  - Modal with Yes/No
+- Stage complete popup:
+  - Centered card with "Stage Complete!" and buttons: Back to Stages, Next Stage (hidden on final stage)
+
+Dev Mode / Editing
+- Exported dev_mode flag in main script.
+- When dev_mode true: show Solve button and dev difficulty dropdown.
+- Dev difficulty dropdown allows manual override of difficulty in the JSON:
+  - Saves difficulty, difficulty_label, difficulty_manual=true.
+- About text and How To text are exported multiline strings (BBCode allowed).
+- Wall tint colors are exported: wall_tint and wall_tint_contrast.
+- Sound toggle persists to user://settings.json.
+- Progress stored in user://progress.json.
+
+Hint/Solve
+- Solver uses best-first (A*) with heuristic to reduce search misses.
+- Hint cache: same board state returns cached hint; cache clears on move/restart/new level.
+- If hint search capped: show "Hint search limit reached. Try Restart."
+- If no solution: show "No solution found. Press Restart." and play sfx_no_solution.
+
+Assets
+- res://assets/themes/home_screen.svg
+- res://assets/themes/theme_01..theme_10.svg
+- res://assets/tiles/tile_base.svg
+- res://assets/tiles/wall_block.svg
+- Optional: res://assets/brush.png (dye stations from earlier iterations, not used now)
+
+Audio
+- Exported sfx_move, sfx_lock, sfx_win, sfx_no_solution.
+- All SFX respect sound_enabled.
+
+Key Technical Notes
+- Grid model is authoritative; UI reflects grid data.
+- Walls/locked blocks are immovable; blocks slide until blocked.
+- Hole visuals must remain visible even when empty; blocks hide hole when occupying only if desired (currently hole still visible behind block; tile is opaque to avoid visible box).
+- All rendering uses Control nodes (safe for iOS UI scaling).
+- Portrait layout (example resolution 648x1152).
+
+Build/Publish
+- iOS export via Godot 4 export templates + Xcode on macOS.
+- App Store requires signed build in Xcode and submission via App Store Connect.

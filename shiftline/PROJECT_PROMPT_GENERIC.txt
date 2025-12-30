@@ -1,0 +1,50 @@
+Shiftline - Project Summary (Feature-Only Prompt)
+
+Goal
+Create a polished, portrait-first mobile puzzle game called “Shiftline.” The experience should feel premium, readable on phones, and easy to learn with satisfying progression.
+
+Core Gameplay
+- The game uses a grid-based board with colored blocks, walls, and colored holes.
+- Players swipe to move an entire row or column; blocks slide until blocked.
+- When a block reaches a same-colored hole, it locks in place.
+- The puzzle is solved when all holes are filled with matching blocks.
+- Input should be responsive and locked during animations or auto-solving.
+
+Visuals & Feedback
+- Clear, readable blocks and holes with strong color identity.
+- Holes should look like recessed sockets (depth cue) while preserving color.
+- Solved blocks should be visually distinct (subtle pulse + bright marker).
+- Win celebration with a centered “Stage Clear!” banner and confetti.
+- Sound and light haptic feedback on moves and wins.
+
+Levels & Progression
+- 100 levels grouped into 10 stages (10 levels each).
+- Stage 1: 4 very easy, 4 easy, 2 challenging.
+- Stages 2–10: 5 challenging, 4 hard, 1 very hard per stage.
+- Progress unlocks stages in order; stage/level select screens reflect progress.
+- Levels stored externally with editable difficulty labels.
+
+Screens & Navigation
+- Home screen as the hub: Play, Options, About, How To Play.
+- Stage Select screen with colored cards and progress.
+- Level Select screen matching the Stage Select style.
+- About screen with editable rich text.
+- How To Play screen with editable rich text.
+- Options screen with toggles (Sound, High Contrast, Large Tiles) and Reset Progress.
+- Reset Progress requires confirmation (Yes/No).
+- Home button accessible on all non-gameplay screens.
+
+Hints & Solve
+- Hint button provides a suggested move.
+- Hint results should be cached if the board state hasn’t changed.
+- If no solution is available, show a clear message and suggest restarting.
+- A full “Solve” action exists for development mode only.
+
+Development Tools
+- Development mode toggle for extra tools.
+- Difficulty editor per level for manual correction and saving.
+- Ability to reset progress and settings during testing.
+
+Publish Targets
+- iOS is the primary platform; UI must be optimized for portrait.
+- App Store publication flow is required.

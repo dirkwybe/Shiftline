@@ -1,0 +1,40 @@
+{
+  "width": 8,
+  "height": 8,
+  "palette": [
+    "#3C78DC",
+    "#E65050",
+    "#50BE78",
+    "#E6C846"
+  ],
+  "walls": [
+    [
+      4,
+      3
+    ],
+    [
+      6,
+      3
+    ]
+  ],
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0
+      ],
+      "color": 0
+    }
+  ],
+  "holes": [
+    {
+      "pos": [
+        7,
+        7
+      ],
+      "color": 0
+    }
+  ],
+  "difficulty": 10,
+  "difficulty_label": "easy"
+}
