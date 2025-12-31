@@ -1,3 +1,15 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+.DS_Store
+
+# Exported iOS artifacts (large)
+Shiftline.xcframework/
+Shiftline.xcarchive/
+Shiftline.xcodeproj/
+Shiftline.ipa
+Shiftline.pck
+MoltenVK.xcframework/
+Packaging.log
+ExportOptions.plist
+DistributionSummary.plist

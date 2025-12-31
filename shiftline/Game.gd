@@ -2,8 +2,11 @@ extends Control
 
 const SWIPE_THRESHOLD := 20.0
 const DEFAULT_CELL_SIZE := 72
-const STAGE_CARD_HEIGHT := 110
+const STAGE_CARD_HEIGHT := 140
 const STAGE_GRID_COLUMNS := 2
+const LEVEL_GRID_COLUMNS := 2
+const LEVEL_BUTTON_WIDTH := 120
+const LEVEL_BUTTON_HEIGHT := 90
 const ANIM_DURATION := 0.18
 const SAVE_PATH := "user://progress.json"
 const TILE_TEXTURE_PATH := "res://assets/tiles/tile_base.svg"
@@ -75,7 +78,7 @@ const TILE_OFFSET_BIAS := Vector2(-2, -2)
 @onready var background_rect: TextureRect = $Background
 @onready var safe_area: MarginContainer = $SafeArea
 @onready var game_panel: Control = $SafeArea/VBoxContainer
-@onready var header_label: Label = $SafeArea/VBoxContainer/TopBar/HeaderLabel
+@onready var header_label: RichTextLabel = $SafeArea/VBoxContainer/TopBar/HeaderLabel
 @onready var subheader_label: Label = $SafeArea/VBoxContainer/TopBar/SubHeaderLabel
 @onready var grid_container: GridContainer = $SafeArea/VBoxContainer/CenterContainer/GridContainer
 @onready var moves_label: Label = $SafeArea/VBoxContainer/TopBar/SubHeaderLabel
@@ -172,13 +175,19 @@ func _ready() -> void:
 
 func _style_ui() -> void:
 	if header_label != null:
-		header_label.add_theme_font_size_override("font_size", 22)
+		header_label.bbcode_enabled = true
+		header_label.fit_content = true
+		header_label.scroll_active = false
+		header_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+		header_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		header_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		header_label.add_theme_font_size_override("normal_font_size", 46)
 	if subheader_label != null:
-		subheader_label.add_theme_font_size_override("font_size", 14)
+		subheader_label.add_theme_font_size_override("font_size", 18)
 	if status_label != null:
-		status_label.add_theme_font_size_override("font_size", 18)
+		status_label.add_theme_font_size_override("font_size", 20)
 	if new_level_button != null:
-		new_level_button.custom_minimum_size = Vector2(180, 48)
+		new_level_button.custom_minimum_size = Vector2(200, 54)
 		_style_start_button(new_level_button, Color8(83, 201, 255))
 	var button_colors: Array[Color] = [
 		Color8(83, 201, 255),
@@ -193,8 +202,8 @@ func _style_ui() -> void:
 	for child in hbox.get_children():
 		if child is Button:
 			var btn := child as Button
-			btn.add_theme_font_size_override("font_size", 16)
-			btn.custom_minimum_size = Vector2(0, 48)
+			btn.add_theme_font_size_override("font_size", 18)
+			btn.custom_minimum_size = Vector2(0, 52)
 			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			_style_start_button(btn, button_colors[color_index % button_colors.size()])
 			color_index += 1
@@ -438,7 +447,7 @@ func _ensure_options_panel() -> Control:
 	title_wrap.name = "OptionsTitleWrap"
 	title_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_wrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	title_wrap.custom_minimum_size = Vector2(0, 70)
+	title_wrap.custom_minimum_size = Vector2(0, 140)
 	layout.add_child(title_wrap)
 
 	var title := RichTextLabel.new()
@@ -450,7 +459,7 @@ func _ensure_options_panel() -> Control:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title.text = _rainbow_title("Options")
-	title.add_theme_font_size_override("normal_font_size", 40)
+	title.add_theme_font_size_override("normal_font_size", 46)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	title_wrap.add_child(title)
@@ -547,8 +556,8 @@ func _ensure_start_panel() -> Control:
 			backdrop.texture = load("res://assets/themes/home_screen.svg") as Texture2D
 		var title := panel.get_node_or_null("StartLayout/StartTitle") as RichTextLabel
 		if title != null:
-			title.add_theme_font_size_override("normal_font_size", 64)
-			title.custom_minimum_size = Vector2(0, 180)
+			title.add_theme_font_size_override("normal_font_size", 72)
+			title.custom_minimum_size = Vector2(0, 200)
 		var play := panel.get_node_or_null("StartLayout/StartBox/StartVBox/StartPlayButton") as Button
 		if play != null:
 			play.pressed.connect(_show_stage_select)
@@ -606,8 +615,8 @@ func _ensure_start_panel() -> Control:
 	title.fit_content = true
 	title.scroll_active = false
 	title.text = "[center][color=#6ED3FF]S[/color][color=#6BFFA0]h[/color][color=#F9D56E]i[/color][color=#FF7A7A]f[/color][color=#B76DFF]t[/color][color=#6ED3FF]l[/color][color=#6BFFA0]i[/color][color=#F9D56E]n[/color][color=#FF7A7A]e[/color][/center]"
-	title.add_theme_font_size_override("font_size", 52)
-	title.custom_minimum_size = Vector2(0, 140)
+	title.add_theme_font_size_override("normal_font_size", 72)
+	title.custom_minimum_size = Vector2(0, 200)
 	layout.add_child(title)
 
 	var spacer := Control.new()
@@ -616,7 +625,7 @@ func _ensure_start_panel() -> Control:
 
 	var center := PanelContainer.new()
 	center.name = "StartBox"
-	center.custom_minimum_size = Vector2(300, 260)
+	center.custom_minimum_size = Vector2(320, 280)
 	center.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	center.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var transparent := StyleBoxEmpty.new()
@@ -674,7 +683,7 @@ func _ensure_start_panel() -> Control:
 	return panel
 
 func _style_start_button(btn: Button, color: Color) -> void:
-	btn.add_theme_font_size_override("font_size", 18)
+	btn.add_theme_font_size_override("font_size", 20)
 	btn.add_theme_constant_override("outline_size", 2)
 	btn.add_theme_color_override("font_outline_color", Color8(255, 220, 120))
 	btn.add_theme_color_override("font_color", Color8(12, 32, 74))
@@ -710,7 +719,7 @@ func _rainbow_title(text: String) -> String:
 	result += "[/center]"
 	return result
 
-func _style_stage_card(btn: Button, theme_index: int, locked: bool) -> void:
+func _style_stage_card(btn: Button, theme_index: int, locked: bool, unplayed: bool) -> void:
 	var accent: Color = THEME_ACCENTS[clampi(theme_index, 0, THEME_ACCENTS.size() - 1)]
 	if locked:
 		accent = accent.darkened(0.55)
@@ -720,6 +729,17 @@ func _style_stage_card(btn: Button, theme_index: int, locked: bool) -> void:
 	normal.corner_radius_top_right = 12
 	normal.corner_radius_bottom_left = 12
 	normal.corner_radius_bottom_right = 12
+	normal.shadow_color = Color(0, 0, 0, 0.3)
+	normal.shadow_size = 6
+	normal.shadow_offset = Vector2(0, 4)
+	normal.border_width_left = 3
+	normal.border_width_right = 3
+	normal.border_width_top = 3
+	normal.border_width_bottom = 3
+	if unplayed:
+		normal.border_color = Color(1, 1, 1, 0.6 if locked else 0.95)
+	else:
+		normal.border_color = accent.lightened(0.2)
 	normal.content_margin_left = 8
 	normal.content_margin_right = 8
 	normal.content_margin_top = 6
@@ -731,21 +751,32 @@ func _style_stage_card(btn: Button, theme_index: int, locked: bool) -> void:
 	btn.add_theme_stylebox_override("normal", normal)
 	btn.add_theme_stylebox_override("hover", hover)
 	btn.add_theme_stylebox_override("pressed", pressed)
+	btn.add_theme_stylebox_override("disabled", normal)
 
 func _style_level_button(btn: Button, theme_index: int, locked: bool) -> void:
 	var accent: Color = THEME_ACCENTS[clampi(theme_index, 0, THEME_ACCENTS.size() - 1)]
 	if locked:
 		accent = accent.darkened(0.6)
+	btn.add_theme_font_size_override("font_size", 20)
+	btn.add_theme_color_override("font_color", Color(1, 1, 1, 0.55) if locked else Color(1, 1, 1, 0.95))
 	var normal := StyleBoxFlat.new()
 	normal.bg_color = accent.darkened(0.35)
 	normal.corner_radius_top_left = 12
 	normal.corner_radius_top_right = 12
 	normal.corner_radius_bottom_left = 12
 	normal.corner_radius_bottom_right = 12
-	normal.content_margin_left = 8
-	normal.content_margin_right = 8
-	normal.content_margin_top = 6
-	normal.content_margin_bottom = 6
+	normal.shadow_color = Color(0, 0, 0, 0.3)
+	normal.shadow_size = 6
+	normal.shadow_offset = Vector2(0, 4)
+	normal.border_width_left = 2
+	normal.border_width_right = 2
+	normal.border_width_top = 2
+	normal.border_width_bottom = 2
+	normal.border_color = accent.lightened(0.2)
+	normal.content_margin_left = 14
+	normal.content_margin_right = 14
+	normal.content_margin_top = 10
+	normal.content_margin_bottom = 10
 	var hover := normal.duplicate()
 	hover.bg_color = accent.darkened(0.25)
 	var pressed := normal.duplicate()
@@ -822,7 +853,7 @@ func _ensure_about_panel() -> Control:
 	title_wrap.name = "AboutTitleWrap"
 	title_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_wrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	title_wrap.custom_minimum_size = Vector2(0, 70)
+	title_wrap.custom_minimum_size = Vector2(0, 140)
 	layout.add_child(title_wrap)
 
 	var title := RichTextLabel.new()
@@ -834,7 +865,7 @@ func _ensure_about_panel() -> Control:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title.text = _rainbow_title("About")
-	title.add_theme_font_size_override("normal_font_size", 40)
+	title.add_theme_font_size_override("normal_font_size", 46)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	title_wrap.add_child(title)
@@ -847,8 +878,23 @@ func _ensure_about_panel() -> Control:
 
 	var center := PanelContainer.new()
 	center.name = "AboutBox"
-	center.custom_minimum_size = Vector2(320, 220)
-	center.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	center.custom_minimum_size = Vector2(360, 320)
+	var card_style := StyleBoxFlat.new()
+	card_style.bg_color = Color(1, 1, 1, 0.5)
+	card_style.corner_radius_top_left = 16
+	card_style.corner_radius_top_right = 16
+	card_style.corner_radius_bottom_left = 16
+	card_style.corner_radius_bottom_right = 16
+	card_style.content_margin_left = 18
+	card_style.content_margin_right = 18
+	card_style.content_margin_top = 16
+	card_style.content_margin_bottom = 16
+	card_style.border_width_left = 1
+	card_style.border_width_right = 1
+	card_style.border_width_top = 1
+	card_style.border_width_bottom = 1
+	card_style.border_color = Color(0, 0, 0, 0.08)
+	center.add_theme_stylebox_override("panel", card_style)
 	center_wrap.add_child(center)
 
 	var vbox := VBoxContainer.new()
@@ -867,6 +913,9 @@ func _ensure_about_panel() -> Control:
 	body.scroll_active = false
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	body.add_theme_font_size_override("normal_font_size", 20)
+	body.add_theme_constant_override("line_separation", 8)
+	body.add_theme_color_override("default_color", Color(0, 0, 0, 1))
 	vbox.add_child(body)
 	about_body_label = body
 
@@ -938,7 +987,7 @@ func _ensure_howto_panel() -> Control:
 	title_wrap.name = "HowToTitleWrap"
 	title_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_wrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	title_wrap.custom_minimum_size = Vector2(0, 70)
+	title_wrap.custom_minimum_size = Vector2(0, 140)
 	layout.add_child(title_wrap)
 
 	var title := RichTextLabel.new()
@@ -950,7 +999,7 @@ func _ensure_howto_panel() -> Control:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title.text = _rainbow_title("How To Play")
-	title.add_theme_font_size_override("normal_font_size", 40)
+	title.add_theme_font_size_override("normal_font_size", 46)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	title_wrap.add_child(title)
@@ -963,8 +1012,23 @@ func _ensure_howto_panel() -> Control:
 
 	var center := PanelContainer.new()
 	center.name = "HowToBox"
-	center.custom_minimum_size = Vector2(320, 260)
-	center.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	center.custom_minimum_size = Vector2(360, 320)
+	var card_style := StyleBoxFlat.new()
+	card_style.bg_color = Color(1, 1, 1, 0.5)
+	card_style.corner_radius_top_left = 16
+	card_style.corner_radius_top_right = 16
+	card_style.corner_radius_bottom_left = 16
+	card_style.corner_radius_bottom_right = 16
+	card_style.content_margin_left = 18
+	card_style.content_margin_right = 18
+	card_style.content_margin_top = 16
+	card_style.content_margin_bottom = 16
+	card_style.border_width_left = 1
+	card_style.border_width_right = 1
+	card_style.border_width_top = 1
+	card_style.border_width_bottom = 1
+	card_style.border_color = Color(0, 0, 0, 0.08)
+	center.add_theme_stylebox_override("panel", card_style)
 	center_wrap.add_child(center)
 
 	var vbox := VBoxContainer.new()
@@ -983,6 +1047,9 @@ func _ensure_howto_panel() -> Control:
 	body.scroll_active = false
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	body.add_theme_font_size_override("normal_font_size", 20)
+	body.add_theme_constant_override("line_separation", 8)
+	body.add_theme_color_override("default_color", Color(0, 0, 0, 1))
 	vbox.add_child(body)
 	howto_body_label = body
 
@@ -1475,9 +1542,9 @@ func _update_tiles() -> void:
 func _update_hud() -> void:
 	var level_text := "Stage %d-%d" % [current_stage, current_level_in_stage]
 	if header_label != null:
-		header_label.text = current_theme_name
+		header_label.text = _rainbow_title(level_text)
 	if subheader_label != null:
-		subheader_label.text = "%s - %s | Moves: %d" % [current_level_name, level_text, moves_made]
+		subheader_label.text = "%s • %s | Moves: %d" % [current_level_name, current_theme_name, moves_made]
 	if new_level_button != null:
 		var can_advance := _can_advance_level()
 		new_level_button.disabled = not can_advance
@@ -2155,7 +2222,7 @@ func _ensure_stage_panel() -> Control:
 	title_wrap.name = "StageTitleWrap"
 	title_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_wrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	title_wrap.custom_minimum_size = Vector2(0, 70)
+	title_wrap.custom_minimum_size = Vector2(0, 140)
 	vbox.add_child(title_wrap)
 
 	var title := RichTextLabel.new()
@@ -2167,10 +2234,15 @@ func _ensure_stage_panel() -> Control:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title.text = _rainbow_title("Select Stage")
-	title.add_theme_font_size_override("normal_font_size", 40)
+	title.add_theme_font_size_override("normal_font_size", 46)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	title_wrap.add_child(title)
+
+	var grid_spacer := Control.new()
+	grid_spacer.name = "StageGridSpacer"
+	grid_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(grid_spacer)
 
 	var grid_margin := MarginContainer.new()
 	grid_margin.name = "StageGridMargin"
@@ -2178,21 +2250,25 @@ func _ensure_stage_panel() -> Control:
 	grid_margin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	grid_margin.add_theme_constant_override("margin_left", 12)
 	grid_margin.add_theme_constant_override("margin_right", 12)
-	grid_margin.add_theme_constant_override("margin_top", 28)
-	grid_margin.add_theme_constant_override("margin_bottom", 84)
+	grid_margin.add_theme_constant_override("margin_top", 20)
+	grid_margin.add_theme_constant_override("margin_bottom", 24)
 	vbox.add_child(grid_margin)
 
 	var grid := GridContainer.new()
 	grid.name = "StageGrid"
 	grid.columns = STAGE_GRID_COLUMNS
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var hsep := 32
-	var vsep := 32
+	var hsep := 36
+	var vsep := 28
 	grid.add_theme_constant_override("hseparation", hsep)
 	grid.add_theme_constant_override("vseparation", vsep)
 	var rows := int(ceil(10.0 / float(grid.columns)))
-	grid.custom_minimum_size = Vector2(0, rows * STAGE_CARD_HEIGHT + max(0, rows - 1) * vsep)
+	var col_gaps := maxi(0, STAGE_GRID_COLUMNS - 1)
+	var row_gaps := maxi(0, rows - 1)
+	var grid_width: float = float(STAGE_GRID_COLUMNS * STAGE_CARD_HEIGHT + col_gaps * hsep)
+	var grid_height: float = float(rows * STAGE_CARD_HEIGHT + row_gaps * vsep)
+	grid.custom_minimum_size = Vector2(grid_width, grid_height)
 	grid_margin.add_child(grid)
 
 	for i in range(1, 11):
@@ -2200,9 +2276,9 @@ func _ensure_stage_panel() -> Control:
 		btn.name = "StageButton%d" % i
 		btn.text = ""
 		btn.flat = false
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		btn.custom_minimum_size = Vector2(0, STAGE_CARD_HEIGHT)
+		btn.custom_minimum_size = Vector2(STAGE_CARD_HEIGHT, STAGE_CARD_HEIGHT)
 		btn.pressed.connect(_on_stage_pressed.bind(i))
 		grid.add_child(btn)
 
@@ -2220,7 +2296,8 @@ func _ensure_stage_panel() -> Control:
 		name_label.name = "StageName%d" % i
 		name_label.text = "Stage %d" % i
 		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		name_label.add_theme_font_size_override("font_size", 18)
+		name_label.add_theme_font_size_override("font_size", 22)
+		name_label.add_theme_color_override("font_color", Color(1, 1, 1, 1))
 		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		content.add_child(name_label)
@@ -2229,7 +2306,8 @@ func _ensure_stage_panel() -> Control:
 		theme_label.name = "StageTheme%d" % i
 		theme_label.text = ""
 		theme_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		theme_label.add_theme_font_size_override("font_size", 14)
+		theme_label.add_theme_font_size_override("font_size", 16)
+		theme_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.85))
 		theme_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		theme_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		content.add_child(theme_label)
@@ -2241,7 +2319,7 @@ func _ensure_stage_panel() -> Control:
 		progress.value = 0
 		progress.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		progress.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		progress.custom_minimum_size = Vector2(0, 12)
+		progress.custom_minimum_size = Vector2(0, 14)
 		progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		content.add_child(progress)
 
@@ -2249,7 +2327,8 @@ func _ensure_stage_panel() -> Control:
 		lock_label.name = "StageLocked%d" % i
 		lock_label.text = "Locked"
 		lock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lock_label.add_theme_font_size_override("font_size", 12)
+		lock_label.add_theme_font_size_override("font_size", 14)
+		lock_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.75))
 		lock_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		lock_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		lock_label.visible = false
@@ -2303,8 +2382,9 @@ func _update_stage_buttons() -> void:
 			theme_label.text = THEME_NAMES[theme_index]
 		progress.value = completed
 		var locked := i > unlocked_stage
+		var unplayed := completed == 0
 		btn.disabled = locked
-		_style_stage_card(btn, theme_index, locked)
+		_style_stage_card(btn, theme_index, locked, unplayed)
 		if lock_label != null:
 			lock_label.visible = locked
 			lock_label.text = "Locked" if locked else ""
@@ -2396,7 +2476,7 @@ func _ensure_level_panel() -> Control:
 	title_wrap.name = "LevelTitleWrap"
 	title_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_wrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	title_wrap.custom_minimum_size = Vector2(0, 70)
+	title_wrap.custom_minimum_size = Vector2(0, 140)
 	vbox.add_child(title_wrap)
 
 	var title := RichTextLabel.new()
@@ -2408,38 +2488,87 @@ func _ensure_level_panel() -> Control:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title.text = _rainbow_title("Select Level")
-	title.add_theme_font_size_override("normal_font_size", 40)
+	title.add_theme_font_size_override("normal_font_size", 46)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	title_wrap.add_child(title)
 
+	var grid_spacer := Control.new()
+	grid_spacer.name = "LevelGridSpacer"
+	grid_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(grid_spacer)
+
+	var grid_row := HBoxContainer.new()
+	grid_row.name = "LevelGridRow"
+	grid_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	grid_row.add_theme_constant_override("separation", 0)
+	vbox.add_child(grid_row)
+
+	var left_spacer := Control.new()
+	left_spacer.name = "LevelGridLeftSpacer"
+	left_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid_row.add_child(left_spacer)
+
+	var grid_margin := MarginContainer.new()
+	grid_margin.name = "LevelGridMargin"
+	grid_margin.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	grid_margin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	grid_margin.add_theme_constant_override("margin_left", 12)
+	grid_margin.add_theme_constant_override("margin_right", 12)
+	grid_margin.add_theme_constant_override("margin_top", 20)
+	grid_margin.add_theme_constant_override("margin_bottom", 24)
+	grid_row.add_child(grid_margin)
+
+	var right_spacer := Control.new()
+	right_spacer.name = "LevelGridRightSpacer"
+	right_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid_row.add_child(right_spacer)
+
 	var grid := GridContainer.new()
 	grid.name = "LevelGrid"
-	grid.columns = 5
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.columns = LEVEL_GRID_COLUMNS
+	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	grid.add_theme_constant_override("hseparation", 10)
-	grid.add_theme_constant_override("vseparation", 10)
-	vbox.add_child(grid)
+	var hsep := 96
+	var vsep := 64
+	grid.add_theme_constant_override("hseparation", hsep)
+	grid.add_theme_constant_override("vseparation", vsep)
+	grid_margin.add_child(grid)
 
 	for i in range(1, 11):
 		var btn := Button.new()
 		btn.name = "LevelButton%d" % i
-		btn.text = "Level %d" % i
-		btn.custom_minimum_size = Vector2(0, 60)
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.text = ""
+		btn.custom_minimum_size = Vector2(LEVEL_BUTTON_WIDTH, LEVEL_BUTTON_HEIGHT)
+		btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		btn.pressed.connect(_on_level_pressed.bind(i))
 		grid.add_child(btn)
 
-		var badge := Label.new()
-		badge.name = "LevelBadge%d" % i
-		badge.text = ""
-		badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		badge.set_anchors_preset(Control.PRESET_FULL_RECT)
-		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		btn.add_child(badge)
+		var content := HBoxContainer.new()
+		content.name = "LevelContent%d" % i
+		content.set_anchors_preset(Control.PRESET_FULL_RECT)
+		content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		content.alignment = BoxContainer.ALIGNMENT_CENTER
+		content.add_theme_constant_override("separation", 8)
+		content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		btn.add_child(content)
+
+		var label := Label.new()
+		label.name = "LevelLabel%d" % i
+		label.text = "Level %d" % i
+		label.add_theme_font_size_override("font_size", 20)
+		label.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
+		content.add_child(label)
+
+		var tick := Label.new()
+		tick.name = "LevelTick%d" % i
+		tick.text = ""
+		tick.add_theme_font_size_override("font_size", 18)
+		tick.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
+		content.add_child(tick)
 	var spacer := Control.new()
 	spacer.name = "LevelSpacer"
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -2485,7 +2614,7 @@ func _show_level_select() -> void:
 	_apply_menu_theme(current_stage)
 
 func _update_level_buttons() -> void:
-	var grid := level_panel.get_node("LevelPanelVBox/LevelGrid") as GridContainer
+	var grid := level_panel.get_node("LevelPanelVBox/LevelGridRow/LevelGridMargin/LevelGrid") as GridContainer
 	if grid == null:
 		return
 	var completed := int(stage_progress.get(str(current_stage), 0))
@@ -2494,13 +2623,15 @@ func _update_level_buttons() -> void:
 		var btn := grid.get_node("LevelButton%d" % i) as Button
 		if btn == null:
 			continue
-		btn.text = "Level %d" % i
+		var label := btn.get_node_or_null("LevelContent%d/LevelLabel%d" % [i, i]) as Label
+		if label != null:
+			label.text = "Level %d" % i
+		var tick := btn.get_node_or_null("LevelContent%d/LevelTick%d" % [i, i]) as Label
+		if tick != null:
+			tick.text = "✓" if i <= completed else ""
 		var locked: bool = i > min(completed + 1, 10)
 		btn.disabled = locked
 		_style_level_button(btn, theme_index, locked)
-		var badge := btn.get_node_or_null("LevelBadge%d" % i) as Label
-		if badge != null:
-			badge.text = "✓" if i <= completed else ""
 
 func _on_level_pressed(level_in_stage: int) -> void:
 	current_level_in_stage = level_in_stage
