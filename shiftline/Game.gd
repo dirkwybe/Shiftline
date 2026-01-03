@@ -1,5 +1,3 @@
-## main code
-
 extends Control
 
 const SWIPE_THRESHOLD := 20.0
