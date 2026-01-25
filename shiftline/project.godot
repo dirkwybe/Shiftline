@@ -13,12 +13,13 @@ config_version=5
 config/name="Shiftline"
 run/main_scene="uid://c5ufopo7w0an7"
 config/features=PackedStringArray("4.5", "Mobile")
+boot_splash/image="uid://w4br2s62irvy"
 config/icon="res://icon.svg"
 
 [display]
 
-window/size/viewport_width=648
-window/size/viewport_height=1152
+window/size/viewport_width=720
+window/size/viewport_height=1280
 window/stretch/mode="canvas_items"
 window/handheld/orientation=1
 

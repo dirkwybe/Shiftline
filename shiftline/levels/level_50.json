@@ -9,53 +9,41 @@
   ],
   "walls": [
     [
-      0,
-      0
-    ],
-    [
-      0,
-      6
-    ],
-    [
       1,
-      2
-    ],
-    [
-      3,
-      2
-    ],
-    [
-      3,
-      6
+      7
     ],
     [
       4,
-      6
+      2
     ],
     [
-      6,
-      1
+      4,
+      3
+    ],
+    [
+      5,
+      7
     ]
   ],
   "blocks": [
     {
       "pos": [
         0,
-        7
+        0
       ],
-      "color": 3
+      "color": 2
     },
     {
       "pos": [
-        2,
-        5
+        0,
+        6
       ],
       "color": 0
     },
     {
       "pos": [
-        2,
-        3
+        0,
+        7
       ],
       "color": 1
     }
@@ -64,25 +52,26 @@
     {
       "pos": [
         0,
-        1
+        4
       ],
       "color": 1
     },
     {
       "pos": [
-        7,
-        0
+        1,
+        1
       ],
       "color": 0
     },
     {
       "pos": [
-        7,
-        2
+        6,
+        0
       ],
-      "color": 3
+      "color": 2
     }
   ],
-  "difficulty": 8,
-  "difficulty_label": "very hard"
+  "bouncers": [],
+  "difficulty": 4,
+  "difficulty_label": "hard"
 }

@@ -61,6 +61,7 @@
       "color": 3
     }
   ],
-  "difficulty": 8,
-  "difficulty_label": "very hard"
+  "bouncers": [],
+  "difficulty": 4,
+  "difficulty_label": "hard"
 }

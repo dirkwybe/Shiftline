@@ -10,14 +10,14 @@
   "walls": [
     [
       4,
-      4
+      6
     ]
   ],
   "blocks": [
     {
       "pos": [
         0,
-        0
+        7
       ],
       "color": 0
     }
@@ -26,11 +26,12 @@
     {
       "pos": [
         7,
-        7
+        0
       ],
       "color": 0
     }
   ],
-  "difficulty": 6,
-  "difficulty_label": "easy"
+  "bouncers": [],
+  "difficulty": 2,
+  "difficulty_label": "fun"
 }

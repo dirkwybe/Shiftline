@@ -9,26 +9,26 @@
   ],
   "walls": [
     [
-      5,
+      1,
       1
     ],
     [
-      1,
-      5
+      6,
+      7
     ]
   ],
   "blocks": [
     {
       "pos": [
-        5,
-        5
+        0,
+        0
       ],
       "color": 1
     },
     {
       "pos": [
-        4,
-        5
+        1,
+        0
       ],
       "color": 0
     }
@@ -36,19 +36,20 @@
   "holes": [
     {
       "pos": [
-        2,
-        7
+        5,
+        0
       ],
-      "color": 0
+      "color": 1
     },
     {
       "pos": [
-        5,
+        7,
         7
       ],
-      "color": 1
+      "color": 0
     }
   ],
-  "difficulty": 1,
+  "bouncers": [],
+  "difficulty": 3,
   "difficulty_label": "challenging"
 }

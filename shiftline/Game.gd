@@ -10,19 +10,25 @@ const LEVEL_BUTTON_HEIGHT := 90
 const ANIM_DURATION := 0.18
 const SAVE_PATH := "user://progress.json"
 const TILE_TEXTURE_PATH := "res://assets/tiles/tile_base.svg"
-const WALL_TEXTURE_PATH := "res://assets/tiles/wall_block.svg"
-const DIFFICULTY_LABELS := ["very easy", "easy", "challenging", "hard", "very hard"]
+const WALL_TEXTURE_PATH := "res://assets/tiles/wall_block3.svg"
+const DIFFICULTY_LABELS := ["easy", "fun", "challenging", "hard"]
+const DIFFICULTY_VALUES := {
+	"easy": 1,
+	"fun": 2,
+	"challenging": 3,
+	"hard": 4
+}
 const THEME_TEXTURES := [
-	"res://assets/themes/theme_01.svg",
-	"res://assets/themes/theme_02.svg",
-	"res://assets/themes/theme_03.svg",
-	"res://assets/themes/theme_04.svg",
-	"res://assets/themes/theme_05.svg",
-	"res://assets/themes/theme_06.svg",
-	"res://assets/themes/theme_07.svg",
-	"res://assets/themes/theme_08.svg",
-	"res://assets/themes/theme_09.svg",
-	"res://assets/themes/theme_10.svg",
+	"res://assets/bg/bg_gameplay.png",
+	"res://assets/bg/bg_gameplay.png",
+	"res://assets/bg/bg_gameplay.png",
+	"res://assets/bg/bg_gameplay.png",
+	"res://assets/bg/bg_gameplay.png",
+	"res://assets/bg/bg_gameplay.png",
+	"res://assets/bg/bg_gameplay.png",
+	"res://assets/bg/bg_gameplay.png",
+	"res://assets/bg/bg_gameplay.png",
+	"res://assets/bg/bg_gameplay.png",
 ]
 const THEME_NAMES := [
 	"Crystal Coast",
@@ -72,16 +78,17 @@ const TILE_OFFSET_BIAS := Vector2(-2, -2)
 @export var sound_enabled := true
 @export_multiline var about_text: String = "Shiftline is a sliding puzzle about\nmatching colors and finding order.\nMade for iOS."
 @export_multiline var howto_text: String = "[center][b]How to Play[/b][/center]\n\n- Swipe a row or column to slide blocks.\n- Blocks slide until they hit a wall or another locked block.\n- Match blocks to same-colored holes to lock them.\n- Lock all blocks to win.\n\nTip: Use Hint if you get stuck."
-@export var wall_tint: Color = Color(0.35, 0.35, 0.4, 1.0)
-@export var wall_tint_contrast: Color = Color(0.3, 0.3, 0.35, 1.0)
+@export var button_font: Font
+@export var wall_tint: Color = Color(1, 1, 1, 1)
+@export var wall_tint_contrast: Color = Color(1, 1, 1, 1)
 
 @onready var background_rect: TextureRect = $Background
 @onready var safe_area: MarginContainer = $SafeArea
 @onready var game_panel: Control = $SafeArea/VBoxContainer
-@onready var header_label: RichTextLabel = $SafeArea/VBoxContainer/TopBar/HeaderLabel
-@onready var subheader_label: Label = $SafeArea/VBoxContainer/TopBar/SubHeaderLabel
+@onready var header_label: RichTextLabel = $SafeArea/VBoxContainer/TopBarCard/TopBar/HeaderLabel
+@onready var subheader_label: Label = $SafeArea/VBoxContainer/TopBarCard/TopBar/SubHeaderLabel
 @onready var grid_container: GridContainer = $SafeArea/VBoxContainer/CenterContainer/GridContainer
-@onready var moves_label: Label = $SafeArea/VBoxContainer/TopBar/SubHeaderLabel
+@onready var moves_label: Label = $SafeArea/VBoxContainer/TopBarCard/TopBar/SubHeaderLabel
 @onready var status_label: Label = $SafeArea/VBoxContainer/StatusLabel
 @onready var hbox: HBoxContainer = $SafeArea/VBoxContainer/HBoxContainer
 @onready var new_level_button: Button = $SafeArea/VBoxContainer/NextLevelWrap/NewLevelButton
@@ -91,6 +98,7 @@ const TILE_OFFSET_BIAS := Vector2(-2, -2)
 @onready var stages_button: Button = _ensure_hbox_button("StagesButton", "Stages")
 @onready var options_button: Button = _ensure_hbox_button("OptionsButton", "Options")
 @onready var home_button: Button = _ensure_hbox_button("HomeButton", "Home")
+@onready var editor_back_button: Button = _ensure_hbox_button("BackToEditorButton", "Back to Editor")
 @onready var animation_layer: Control = _ensure_animation_layer()
 @onready var debug_layer: Control = _ensure_debug_layer()
 @onready var stage_panel: Control = _ensure_stage_panel()
@@ -112,6 +120,7 @@ var palette: Array[Color] = []
 var grid: Array = []
 var walls: Dictionary = {}
 var holes: Dictionary = {}
+var bouncers: Dictionary = {}
 var locked: Dictionary = {}
 var cells: Array = []
 
@@ -143,12 +152,27 @@ var cached_hint_capped := false
 var cached_hint_unsolvable := false
 var about_body_label: RichTextLabel = null
 var howto_body_label: RichTextLabel = null
+var glow_textures: Dictionary = {}
+var sparkle_rng := RandomNumberGenerator.new()
+var win_rng := RandomNumberGenerator.new()
+var level_stats: Dictionary = {}
+var level_start_time_msec: int = 0
+var current_level_min_moves: int = -1
+var hide_blocks_for_anim := false
+var editor_preview_active := false
+var editor_preview_path := ""
+var next_level_countdown_active := false
+var next_level_countdown_left := 0
+var next_level_countdown_token := 0
+var level_intro_running := false
 
 var swipe_active := false
 var swipe_start_pos := Vector2.ZERO
 var swipe_start_cell := Vector2i(-1, -1)
 
 func _ready() -> void:
+	sparkle_rng.randomize()
+	win_rng.randomize()
 	new_level_button.pressed.connect(_on_new_level_pressed)
 	restart_button.pressed.connect(_on_restart_pressed)
 	if solve_button != null:
@@ -161,7 +185,11 @@ func _ready() -> void:
 		options_button.pressed.connect(_on_options_pressed)
 	if home_button != null:
 		home_button.pressed.connect(_on_home_pressed)
+	if editor_back_button != null:
+		editor_back_button.pressed.connect(_on_back_to_editor_pressed)
 	_style_ui()
+	if background_rect != null:
+		_apply_background_cover(background_rect)
 	_setup_dev_ui()
 	_ensure_tile_texture()
 	_ensure_wall_texture()
@@ -171,9 +199,16 @@ func _ready() -> void:
 	_build_level_paths()
 	_load_progress()
 	_update_stage_buttons()
+	_check_editor_preview()
+	if editor_preview_active:
+		load_level(editor_preview_path)
+		return
 	_show_start_screen()
 
 func _style_ui() -> void:
+	var top_bar_card := get_node_or_null("SafeArea/VBoxContainer/TopBarCard") as PanelContainer
+	if top_bar_card != null:
+		_apply_glass_panel_compact(top_bar_card)
 	if header_label != null:
 		header_label.bbcode_enabled = true
 		header_label.fit_content = true
@@ -187,7 +222,7 @@ func _style_ui() -> void:
 	if status_label != null:
 		status_label.add_theme_font_size_override("font_size", 20)
 	if new_level_button != null:
-		new_level_button.custom_minimum_size = Vector2(200, 54)
+		new_level_button.custom_minimum_size = Vector2(220, 60)
 		_style_start_button(new_level_button, Color8(83, 201, 255))
 	var button_colors: Array[Color] = [
 		Color8(83, 201, 255),
@@ -203,16 +238,114 @@ func _style_ui() -> void:
 		if child is Button:
 			var btn := child as Button
 			btn.add_theme_font_size_override("font_size", 18)
-			btn.custom_minimum_size = Vector2(0, 52)
+			btn.custom_minimum_size = Vector2(0, 58)
 			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			_style_start_button(btn, button_colors[color_index % button_colors.size()])
 			color_index += 1
+	if editor_back_button != null:
+		_style_start_button(editor_back_button, Color8(183, 109, 255))
 	if solve_button != null:
 		solve_button.visible = dev_mode
 	if hint_button != null:
 		hint_button.visible = true
+	if editor_back_button != null:
+		editor_back_button.visible = false
 	if options_button != null:
 		options_button.visible = false
+
+func _get_glow_texture(size: int, color: Color) -> Texture2D:
+	var key: String = "%d_%s" % [size, color.to_html()]
+	if glow_textures.has(key):
+		return glow_textures[key]
+	var img: Image = Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var center: Vector2 = Vector2((size - 1) * 0.5, (size - 1) * 0.5)
+	var radius: float = center.x
+	for y in size:
+		for x in size:
+			var dist: float = Vector2(x, y).distance_to(center) / radius
+			var alpha: float = clampf(1.0 - dist, 0.0, 1.0)
+			alpha = alpha * alpha
+			img.set_pixel(x, y, Color(color.r, color.g, color.b, alpha * color.a))
+	var tex: ImageTexture = ImageTexture.create_from_image(img)
+	glow_textures[key] = tex
+	return tex
+
+func _ensure_start_twinkles() -> void:
+	if start_panel == null:
+		return
+	var layer := start_panel.get_node_or_null("StartTwinkleLayer") as Control
+	if layer == null:
+		layer = Control.new()
+		layer.name = "StartTwinkleLayer"
+		layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+		layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		start_panel.add_child(layer)
+		var backdrop := start_panel.get_node_or_null("StartBackdrop") as CanvasItem
+		if backdrop != null:
+			var idx: int = backdrop.get_index()
+			start_panel.move_child(layer, idx + 1)
+		_create_twinkle(layer, Vector2(0.22, 0.28), 260, Color(0.42, 0.9, 1.0, 0.95))
+		_create_twinkle(layer, Vector2(0.7, 0.18), 220, Color(0.75, 0.6, 1.0, 0.85))
+		_create_twinkle(layer, Vector2(0.6, 0.82), 280, Color(1.0, 0.85, 0.5, 0.85))
+
+func _create_twinkle(layer: Control, pos_ratio: Vector2, size: float, color: Color) -> void:
+	var node := TextureRect.new()
+	node.texture = _get_glow_texture(128, color)
+	node.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	node.stretch_mode = TextureRect.STRETCH_SCALE
+	node.size = Vector2(size, size)
+	node.pivot_offset = node.size * 0.5
+	var view_size: Vector2 = start_panel.size
+	if view_size == Vector2.ZERO:
+		view_size = get_viewport_rect().size
+	node.position = Vector2(view_size.x * pos_ratio.x, view_size.y * pos_ratio.y) - node.pivot_offset
+	node.modulate = Color(1, 1, 1, 1.0)
+	node.self_modulate = Color(1.0, 1.0, 1.0, 1.0)
+	layer.add_child(node)
+	var tween := create_tween()
+	tween.set_loops()
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	var low: float = color.a * 0.55
+	var high: float = min(color.a * 1.2, 1.0)
+	var t1: float = sparkle_rng.randf_range(0.9, 1.5)
+	var t2: float = sparkle_rng.randf_range(0.9, 1.5)
+	tween.tween_property(node, "modulate:a", high, t1).from(low)
+	tween.tween_property(node, "modulate:a", low, t2)
+
+func _play_start_sparkles() -> void:
+	if start_panel == null:
+		return
+	var layer := start_panel.get_node_or_null("StartTwinkleLayer") as Control
+	if layer == null:
+		return
+	for i in range(16):
+		var size := sparkle_rng.randf_range(22.0, 48.0)
+		var color := Color(1, 1, 1, sparkle_rng.randf_range(0.7, 1.0))
+		var sparkle := TextureRect.new()
+		sparkle.texture = _get_glow_texture(64, color)
+		sparkle.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		sparkle.stretch_mode = TextureRect.STRETCH_SCALE
+		sparkle.size = Vector2(size, size)
+		sparkle.pivot_offset = sparkle.size * 0.5
+		var view_size: Vector2 = start_panel.size
+		if view_size == Vector2.ZERO:
+			view_size = get_viewport_rect().size
+		var px := sparkle_rng.randf_range(view_size.x * 0.15, view_size.x * 0.85)
+		var py := sparkle_rng.randf_range(view_size.y * 0.15, view_size.y * 0.55)
+		sparkle.position = Vector2(px, py) - sparkle.pivot_offset
+		sparkle.modulate = Color(1, 1, 1, 0.0)
+		layer.add_child(sparkle)
+		var tween := create_tween()
+		tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		var rise := sparkle_rng.randf_range(0.4, 0.8)
+		tween.tween_property(sparkle, "modulate:a", color.a, 0.9).from(0.0)
+		tween.tween_property(sparkle, "modulate:a", 0.0, 1.5).set_delay(0.15)
+		tween.tween_property(sparkle, "scale", Vector2(1.35, 1.35), rise * 3.0).from(Vector2.ONE)
+		tween.finished.connect(sparkle.queue_free)
+
+func _apply_background_cover(rect: TextureRect) -> void:
+	rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 
 func _setup_dev_ui() -> void:
 	var dev_panel := get_node_or_null("SafeArea/VBoxContainer/DevPanel") as Control
@@ -238,7 +371,7 @@ func _sync_dev_difficulty_ui() -> void:
 	var dropdown := dev_panel.get_node_or_null("DevPanelHBox/DevDifficultyOption") as OptionButton
 	if dropdown == null:
 		return
-	var target_label := current_difficulty_label
+	var target_label := _normalize_difficulty_label(current_difficulty_label)
 	if target_label == "":
 		target_label = DIFFICULTY_LABELS[0]
 	var idx := DIFFICULTY_LABELS.find(target_label)
@@ -252,7 +385,7 @@ func _on_dev_difficulty_selected(index: int) -> void:
 	if current_level_path == "":
 		return
 	var label: String = DIFFICULTY_LABELS[clampi(index, 0, DIFFICULTY_LABELS.size() - 1)]
-	current_level_data["difficulty"] = index + 1
+	current_level_data["difficulty"] = int(DIFFICULTY_VALUES.get(label, index + 1))
 	current_level_data["difficulty_label"] = label
 	current_level_data["difficulty_manual"] = true
 	_save_current_level_data()
@@ -278,6 +411,7 @@ func _hide_reset_confirm() -> void:
 func _on_reset_confirm_yes() -> void:
 	_hide_reset_confirm()
 	stage_progress = {}
+	level_stats = {}
 	unlocked_stage = 1
 	current_stage = 1
 	current_level_in_stage = 1
@@ -293,8 +427,9 @@ func _ensure_tile_texture() -> void:
 		tile_texture = load(TILE_TEXTURE_PATH) as Texture2D
 
 func _ensure_wall_texture() -> void:
-	if wall_texture == null:
-		wall_texture = load(WALL_TEXTURE_PATH) as Texture2D
+	var tex := load(WALL_TEXTURE_PATH) as Texture2D
+	if tex != null:
+		wall_texture = tex
 
 func _update_about_text() -> void:
 	if about_body_label != null:
@@ -373,7 +508,7 @@ func _on_hint_pressed() -> void:
 	if current_key == cached_hint_key:
 		if not cached_hint_path.is_empty():
 			var cached_move: Dictionary = cached_hint_path[0]
-			_show_debug_line(cached_move["is_row"], cached_move["index"])
+			_show_debug_line(cached_move["is_row"], cached_move["index"], int(cached_move["dir"]), 0.8)
 			status_label.text = "Hint shown"
 			return
 		if cached_hint_capped:
@@ -401,15 +536,105 @@ func _on_hint_pressed() -> void:
 	cached_hint_capped = false
 	cached_hint_unsolvable = false
 	var move: Dictionary = path[0]
-	_show_debug_line(move["is_row"], move["index"])
+	_show_debug_line(move["is_row"], move["index"], int(move["dir"]), 0.8)
 	status_label.text = "Hint shown"
 
 func _on_options_pressed() -> void:
 	start_panel.visible = false
 	about_panel.visible = false
 	options_panel.visible = true
+	if background_rect != null:
+		background_rect.visible = false
+
+func _on_high_contrast_toggled(pressed: bool) -> void:
+	high_contrast = pressed
+	_update_tiles()
+
+func _on_large_tiles_toggled(pressed: bool) -> void:
+	large_tiles = pressed
+	_apply_accessibility()
+
+func _wire_options_panel(panel: Control) -> void:
+	var backdrop: TextureRect = panel.get_node_or_null("OptionsBackdrop") as TextureRect
+	if backdrop != null and backdrop.texture == null:
+		backdrop.texture = load("res://assets/bg/bg_options.png") as Texture2D
+	if backdrop != null:
+		_apply_background_cover(backdrop)
+
+	var top_bar: Control = panel.get_node_or_null("OptionsLayout/OptionsTopBar") as Control
+	if top_bar != null:
+		top_bar.visible = false
+		top_bar.custom_minimum_size = Vector2.ZERO
+		top_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+
+	var title_wrap: Control = panel.get_node_or_null("OptionsLayout/OptionsTitleWrap") as Control
+	if title_wrap != null:
+		title_wrap.visible = false
+		title_wrap.custom_minimum_size = Vector2(0, 0)
+
+	var title: RichTextLabel = panel.get_node_or_null("OptionsLayout/OptionsTitleWrap/OptionsTitle") as RichTextLabel
+	if title != null and title.text.strip_edges() == "":
+		title.bbcode_enabled = true
+		title.fit_content = true
+		title.scroll_active = false
+		title.autowrap_mode = TextServer.AUTOWRAP_OFF
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		title.text = ""
+
+	var center_wrap: Control = panel.get_node_or_null("OptionsLayout/OptionsCenter") as Control
+	if center_wrap != null:
+		center_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	var spacer: Control = panel.get_node_or_null("OptionsLayout/OptionsSpacer") as Control
+	if spacer != null:
+		spacer.visible = false
+		spacer.custom_minimum_size = Vector2.ZERO
+		spacer.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+
+	var options_box: PanelContainer = panel.get_node_or_null("OptionsLayout/OptionsCenter/OptionsBox") as PanelContainer
+	if options_box != null:
+		_apply_glass_panel(options_box)
+
+	var contrast: CheckButton = panel.get_node_or_null("OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox/HighContrastCheck") as CheckButton
+	if contrast != null:
+		contrast.button_pressed = high_contrast
+		if not contrast.toggled.is_connected(_on_high_contrast_toggled):
+			contrast.toggled.connect(_on_high_contrast_toggled)
+
+	var large: CheckButton = panel.get_node_or_null("OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox/LargeTilesCheck") as CheckButton
+	if large != null:
+		large.button_pressed = large_tiles
+		if not large.toggled.is_connected(_on_large_tiles_toggled):
+			large.toggled.connect(_on_large_tiles_toggled)
+
+	var sound: CheckButton = panel.get_node_or_null("OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox/SoundCheck") as CheckButton
+	if sound != null:
+		sound.button_pressed = sound_enabled
+		if not sound.toggled.is_connected(_on_sound_toggled):
+			sound.toggled.connect(_on_sound_toggled)
+
+	var reset: Button = panel.get_node_or_null("OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox/ResetProgressButton") as Button
+	if reset != null:
+		if not reset.pressed.is_connected(_on_reset_progress_pressed):
+			reset.pressed.connect(_on_reset_progress_pressed)
+		if not reset.has_theme_stylebox_override("normal"):
+			_style_start_button(reset, Color8(255, 184, 107))
+
+	var home: Button = panel.get_node_or_null("OptionsHomeBar/OptionsHomeWrap/OptionsHomeButton") as Button
+	if home != null:
+		if not home.pressed.is_connected(_on_home_pressed):
+			home.pressed.connect(_on_home_pressed)
+		if not home.has_theme_stylebox_override("normal"):
+			_style_start_button(home, Color8(83, 201, 255))
 
 func _ensure_options_panel() -> Control:
+	var existing := get_node_or_null("OptionsPanel")
+	if existing != null and existing is Control:
+		var panel_existing := existing as Control
+		_wire_options_panel(panel_existing)
+		return panel_existing
+
 	var panel := Control.new()
 	panel.name = "OptionsPanel"
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -419,9 +644,9 @@ func _ensure_options_panel() -> Control:
 
 	var backdrop := TextureRect.new()
 	backdrop.name = "OptionsBackdrop"
-	backdrop.texture = load("res://assets/themes/home_screen.svg") as Texture2D
+	backdrop.texture = load("res://assets/bg/bg_options.png") as Texture2D
 	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	backdrop.stretch_mode = TextureRect.STRETCH_SCALE
+	_apply_background_cover(backdrop)
 	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(backdrop)
 
@@ -488,19 +713,13 @@ func _ensure_options_panel() -> Control:
 	var contrast := CheckButton.new()
 	contrast.name = "HighContrastCheck"
 	contrast.text = "High Contrast"
-	contrast.toggled.connect(func(pressed: bool) -> void:
-		high_contrast = pressed
-		_update_tiles()
-	)
+	contrast.toggled.connect(_on_high_contrast_toggled)
 	vbox.add_child(contrast)
 
 	var large := CheckButton.new()
 	large.name = "LargeTilesCheck"
 	large.text = "Large Tiles"
-	large.toggled.connect(func(pressed: bool) -> void:
-		large_tiles = pressed
-		_apply_accessibility()
-	)
+	large.toggled.connect(_on_large_tiles_toggled)
 	vbox.add_child(large)
 
 	var sound := CheckButton.new()
@@ -537,14 +756,14 @@ func _ensure_options_panel() -> Control:
 	home_bar.add_child(home_wrap)
 
 	var home := Button.new()
+	home.name = "OptionsHomeButton"
 	home.text = "Home"
 	home.custom_minimum_size = Vector2(160, 44)
-	home.pressed.connect(func() -> void:
-		_show_start_screen()
-	)
+	home.pressed.connect(_on_home_pressed)
 	_style_start_button(home, Color8(83, 201, 255))
 	home_wrap.add_child(home)
 
+	_wire_options_panel(panel)
 	return panel
 
 func _ensure_start_panel() -> Control:
@@ -553,15 +772,28 @@ func _ensure_start_panel() -> Control:
 		var panel := existing as Control
 		var backdrop := panel.get_node_or_null("StartBackdrop") as TextureRect
 		if backdrop != null:
-			backdrop.texture = load("res://assets/themes/home_screen.svg") as Texture2D
+			if backdrop.texture == null:
+				backdrop.texture = load("res://assets/bg/bg_main.png") as Texture2D
+			_apply_background_cover(backdrop)
 		var title := panel.get_node_or_null("StartLayout/StartTitle") as RichTextLabel
 		if title != null:
 			title.add_theme_font_size_override("normal_font_size", 72)
 			title.custom_minimum_size = Vector2(0, 200)
+		var current := panel.get_node_or_null("StartLayout/StartBox/StartVBox/StartCurrentButton") as Button
+		if current != null:
+			if not current.pressed.is_connected(_start_current_level):
+				current.pressed.connect(_start_current_level)
+			_style_start_button(current, Color8(109, 255, 160))
 		var play := panel.get_node_or_null("StartLayout/StartBox/StartVBox/StartPlayButton") as Button
 		if play != null:
-			play.pressed.connect(_show_stage_select)
+			if not play.pressed.is_connected(_show_stage_select):
+				play.pressed.connect(_show_stage_select)
 			_style_start_button(play, Color8(83, 201, 255))
+		var editor := panel.get_node_or_null("StartLayout/StartBox/StartVBox/StartEditorButton") as Button
+		if editor != null:
+			if not editor.pressed.is_connected(_open_level_editor):
+				editor.pressed.connect(_open_level_editor)
+			_style_start_button(editor, Color8(183, 109, 255))
 		var options := panel.get_node_or_null("StartLayout/StartBox/StartVBox/StartOptionsButton") as Button
 		if options != null:
 			options.pressed.connect(func() -> void:
@@ -584,7 +816,13 @@ func _ensure_start_panel() -> Control:
 			_style_start_button(howto, Color8(109, 255, 160))
 		var box := panel.get_node_or_null("StartLayout/StartBox") as PanelContainer
 		if box != null:
-			box.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+			_apply_glass_panel(box)
+		var top_spacer := panel.get_node_or_null("StartLayout/StartSpacer") as Control
+		if top_spacer != null:
+			top_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		var bottom_spacer := panel.get_node_or_null("StartLayout/StartBottomSpacer") as Control
+		if bottom_spacer != null:
+			bottom_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		return panel
 
 	var panel := Control.new()
@@ -596,9 +834,9 @@ func _ensure_start_panel() -> Control:
 
 	var backdrop := TextureRect.new()
 	backdrop.name = "StartBackdrop"
-	backdrop.texture = load("res://assets/themes/home_screen.svg") as Texture2D
+	backdrop.texture = load("res://assets/bg/bg_main.png") as Texture2D
 	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	backdrop.stretch_mode = TextureRect.STRETCH_SCALE
+	_apply_background_cover(backdrop)
 	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(backdrop)
 
@@ -625,11 +863,10 @@ func _ensure_start_panel() -> Control:
 
 	var center := PanelContainer.new()
 	center.name = "StartBox"
-	center.custom_minimum_size = Vector2(320, 280)
+	center.custom_minimum_size = Vector2(360, 380)
 	center.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	center.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var transparent := StyleBoxEmpty.new()
-	center.add_theme_stylebox_override("panel", transparent)
+	_apply_glass_panel(center)
 	layout.add_child(center)
 
 	var vbox := VBoxContainer.new()
@@ -637,15 +874,31 @@ func _ensure_start_panel() -> Control:
 	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_theme_constant_override("separation", 10)
+	vbox.add_theme_constant_override("separation", 14)
 	center.add_child(vbox)
 
+	var current := Button.new()
+	current.name = "StartCurrentButton"
+	current.text = "Play"
+	current.custom_minimum_size = Vector2(0, 60)
+	current.pressed.connect(_start_current_level)
+	_style_start_button(current, Color8(109, 255, 160))
+	vbox.add_child(current)
+
 	var play := Button.new()
-	play.text = "Play"
-	play.custom_minimum_size = Vector2(0, 52)
+	play.text = "Select Stage"
+	play.custom_minimum_size = Vector2(0, 60)
 	play.pressed.connect(_show_stage_select)
 	_style_start_button(play, Color8(83, 201, 255))
 	vbox.add_child(play)
+
+	var editor := Button.new()
+	editor.name = "StartEditorButton"
+	editor.text = "Level Editor"
+	editor.custom_minimum_size = Vector2(0, 54)
+	editor.pressed.connect(_open_level_editor)
+	_style_start_button(editor, Color8(183, 109, 255))
+	vbox.add_child(editor)
 
 	var options := Button.new()
 	options.text = "Options"
@@ -683,27 +936,88 @@ func _ensure_start_panel() -> Control:
 	return panel
 
 func _style_start_button(btn: Button, color: Color) -> void:
+	if button_font != null:
+		btn.add_theme_font_override("font", button_font)
+	btn.focus_mode = Control.FOCUS_NONE
 	btn.add_theme_font_size_override("font_size", 20)
-	btn.add_theme_constant_override("outline_size", 2)
-	btn.add_theme_color_override("font_outline_color", Color8(255, 220, 120))
-	btn.add_theme_color_override("font_color", Color8(12, 32, 74))
+	btn.add_theme_constant_override("outline_size", 1)
+	btn.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.25))
+	btn.add_theme_color_override("font_color", Color(0.96, 0.98, 1.0, 1.0))
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = color
-	normal.corner_radius_top_left = 14
-	normal.corner_radius_top_right = 14
-	normal.corner_radius_bottom_left = 14
-	normal.corner_radius_bottom_right = 14
-	normal.content_margin_left = 14
-	normal.content_margin_right = 14
-	normal.content_margin_top = 8
-	normal.content_margin_bottom = 8
+	normal.bg_color = Color(color.r, color.g, color.b, 0.24)
+	normal.border_color = Color(1, 1, 1, 0.55)
+	normal.border_width_left = 2
+	normal.border_width_right = 2
+	normal.border_width_top = 2
+	normal.border_width_bottom = 2
+	normal.corner_radius_top_left = 18
+	normal.corner_radius_top_right = 18
+	normal.corner_radius_bottom_left = 18
+	normal.corner_radius_bottom_right = 18
+	normal.shadow_color = Color(0, 0, 0, 0.25)
+	normal.shadow_size = 10
+	normal.shadow_offset = Vector2(0, 4)
+	normal.content_margin_left = 16
+	normal.content_margin_right = 16
+	normal.content_margin_top = 10
+	normal.content_margin_bottom = 10
 	var hover := normal.duplicate()
-	hover.bg_color = color.lightened(0.08)
+	hover.bg_color = Color(color.r, color.g, color.b, 0.32)
+	hover.border_color = Color(1, 1, 1, 0.7)
 	var pressed := normal.duplicate()
-	pressed.bg_color = color.darkened(0.08)
+	pressed.bg_color = Color(color.r, color.g, color.b, 0.18)
+	pressed.border_color = Color(1, 1, 1, 0.45)
+	var focus := StyleBoxEmpty.new()
 	btn.add_theme_stylebox_override("normal", normal)
 	btn.add_theme_stylebox_override("hover", hover)
 	btn.add_theme_stylebox_override("pressed", pressed)
+	btn.add_theme_stylebox_override("focus", focus)
+
+func _apply_glass_panel(panel: PanelContainer) -> void:
+	if panel == null:
+		return
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.9, 0.96, 1.0, 0.18)
+	style.corner_radius_top_left = 22
+	style.corner_radius_top_right = 22
+	style.corner_radius_bottom_left = 22
+	style.corner_radius_bottom_right = 22
+	style.border_width_left = 2
+	style.border_width_right = 2
+	style.border_width_top = 2
+	style.border_width_bottom = 2
+	style.border_color = Color(1, 1, 1, 0.28)
+	style.shadow_color = Color(0, 0, 0, 0.22)
+	style.shadow_size = 10
+	style.shadow_offset = Vector2(0, 6)
+	style.content_margin_left = 24
+	style.content_margin_right = 24
+	style.content_margin_top = 22
+	style.content_margin_bottom = 22
+	panel.add_theme_stylebox_override("panel", style)
+
+func _apply_glass_panel_compact(panel: PanelContainer) -> void:
+	if panel == null:
+		return
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.9, 0.96, 1.0, 0.2)
+	style.corner_radius_top_left = 18
+	style.corner_radius_top_right = 18
+	style.corner_radius_bottom_left = 18
+	style.corner_radius_bottom_right = 18
+	style.border_width_left = 2
+	style.border_width_right = 2
+	style.border_width_top = 2
+	style.border_width_bottom = 2
+	style.border_color = Color(1, 1, 1, 0.3)
+	style.shadow_color = Color(0, 0, 0, 0.2)
+	style.shadow_size = 8
+	style.shadow_offset = Vector2(0, 4)
+	style.content_margin_left = 18
+	style.content_margin_right = 18
+	style.content_margin_top = 14
+	style.content_margin_bottom = 14
+	panel.add_theme_stylebox_override("panel", style)
 
 func _rainbow_title(text: String) -> String:
 	var colors: PackedStringArray = PackedStringArray(["#6ED3FF", "#6BFFA0", "#F9D56E", "#FF7A7A", "#B76DFF"])
@@ -815,7 +1129,68 @@ func _stop_solved_pulse(cell: Dictionary) -> void:
 	var block: TextureRect = cell["block"]
 	block.self_modulate = Color(1, 1, 1, 1.0)
 
+func _wire_about_panel(panel: Control) -> void:
+	var backdrop: TextureRect = panel.get_node_or_null("AboutBackdrop") as TextureRect
+	if backdrop != null and backdrop.texture == null:
+		backdrop.texture = load("res://assets/bg/bg_about.png") as Texture2D
+	if backdrop != null:
+		_apply_background_cover(backdrop)
+
+	var top_bar: Control = panel.get_node_or_null("AboutLayout/AboutTopBar") as Control
+	if top_bar != null:
+		top_bar.visible = false
+		top_bar.custom_minimum_size = Vector2.ZERO
+		top_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+
+	var title_wrap: Control = panel.get_node_or_null("AboutLayout/AboutTitleWrap") as Control
+	if title_wrap != null:
+		title_wrap.visible = false
+		title_wrap.custom_minimum_size = Vector2(0, 0)
+
+	var title: RichTextLabel = panel.get_node_or_null("AboutLayout/AboutTitleWrap/AboutTitle") as RichTextLabel
+	if title != null and title.text.strip_edges() == "":
+		title.bbcode_enabled = true
+		title.fit_content = true
+		title.scroll_active = false
+		title.autowrap_mode = TextServer.AUTOWRAP_OFF
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		title.text = ""
+
+	var center_wrap: Control = panel.get_node_or_null("AboutLayout/AboutCenter") as Control
+	if center_wrap != null:
+		center_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	var spacer: Control = panel.get_node_or_null("AboutLayout/AboutSpacer") as Control
+	if spacer != null:
+		spacer.visible = false
+		spacer.custom_minimum_size = Vector2.ZERO
+		spacer.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+
+	var about_box: PanelContainer = panel.get_node_or_null("AboutLayout/AboutCenter/AboutBox") as PanelContainer
+	if about_box != null:
+		_apply_glass_panel(about_box)
+
+	var body: RichTextLabel = panel.get_node_or_null("AboutLayout/AboutCenter/AboutBox/AboutVBox/AboutBody") as RichTextLabel
+	if body != null:
+		about_body_label = body
+		body.add_theme_font_size_override("normal_font_size", 22)
+		_update_about_text()
+
+	var home: Button = panel.get_node_or_null("AboutHomeBar/AboutHomeWrap/AboutHomeButton") as Button
+	if home != null:
+		if not home.pressed.is_connected(_on_home_pressed):
+			home.pressed.connect(_on_home_pressed)
+		if not home.has_theme_stylebox_override("normal"):
+			_style_start_button(home, Color8(255, 184, 107))
+
 func _ensure_about_panel() -> Control:
+	var existing := get_node_or_null("AboutPanel")
+	if existing != null and existing is Control:
+		var panel_existing := existing as Control
+		_wire_about_panel(panel_existing)
+		return panel_existing
+
 	var panel := Control.new()
 	panel.name = "AboutPanel"
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -825,9 +1200,9 @@ func _ensure_about_panel() -> Control:
 
 	var backdrop := TextureRect.new()
 	backdrop.name = "AboutBackdrop"
-	backdrop.texture = load("res://assets/themes/home_screen.svg") as Texture2D
+	backdrop.texture = load("res://assets/bg/bg_about.png") as Texture2D
 	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	backdrop.stretch_mode = TextureRect.STRETCH_SCALE
+	_apply_background_cover(backdrop)
 	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(backdrop)
 
@@ -907,6 +1282,7 @@ func _ensure_about_panel() -> Control:
 	center.add_child(vbox)
 
 	var body := RichTextLabel.new()
+	body.name = "AboutBody"
 	body.bbcode_enabled = true
 	body.text = about_text
 	body.fit_content = true
@@ -939,17 +1315,78 @@ func _ensure_about_panel() -> Control:
 	home_bar.add_child(home_wrap)
 
 	var home := Button.new()
+	home.name = "AboutHomeButton"
 	home.text = "Home"
 	home.custom_minimum_size = Vector2(160, 44)
-	home.pressed.connect(func() -> void:
-		_show_start_screen()
-	)
+	home.pressed.connect(_on_home_pressed)
 	_style_start_button(home, Color8(255, 184, 107))
 	home_wrap.add_child(home)
 
+	_wire_about_panel(panel)
 	return panel
 
+func _wire_howto_panel(panel: Control) -> void:
+	var backdrop: TextureRect = panel.get_node_or_null("HowToBackdrop") as TextureRect
+	if backdrop != null and backdrop.texture == null:
+		backdrop.texture = load("res://assets/bg/bg_howtoplay.png") as Texture2D
+	if backdrop != null:
+		_apply_background_cover(backdrop)
+
+	var top_bar: Control = panel.get_node_or_null("HowToLayout/HowToTopBar") as Control
+	if top_bar != null:
+		top_bar.visible = false
+		top_bar.custom_minimum_size = Vector2.ZERO
+		top_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+
+	var title_wrap: Control = panel.get_node_or_null("HowToLayout/HowToTitleWrap") as Control
+	if title_wrap != null:
+		title_wrap.visible = false
+		title_wrap.custom_minimum_size = Vector2(0, 0)
+
+	var title: RichTextLabel = panel.get_node_or_null("HowToLayout/HowToTitleWrap/HowToTitle") as RichTextLabel
+	if title != null and title.text.strip_edges() == "":
+		title.bbcode_enabled = true
+		title.fit_content = true
+		title.scroll_active = false
+		title.autowrap_mode = TextServer.AUTOWRAP_OFF
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		title.text = ""
+
+	var center_wrap: Control = panel.get_node_or_null("HowToLayout/HowToCenter") as Control
+	if center_wrap != null:
+		center_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	var spacer: Control = panel.get_node_or_null("HowToLayout/HowToSpacer") as Control
+	if spacer != null:
+		spacer.visible = false
+		spacer.custom_minimum_size = Vector2.ZERO
+		spacer.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+
+	var howto_box: PanelContainer = panel.get_node_or_null("HowToLayout/HowToCenter/HowToBox") as PanelContainer
+	if howto_box != null:
+		_apply_glass_panel(howto_box)
+
+	var body: RichTextLabel = panel.get_node_or_null("HowToLayout/HowToCenter/HowToBox/HowToVBox/HowToBody") as RichTextLabel
+	if body != null:
+		howto_body_label = body
+		body.add_theme_font_size_override("normal_font_size", 22)
+		_update_howto_text()
+
+	var home: Button = panel.get_node_or_null("HowToHomeBar/HowToHomeWrap/HowToHomeButton") as Button
+	if home != null:
+		if not home.pressed.is_connected(_on_home_pressed):
+			home.pressed.connect(_on_home_pressed)
+		if not home.has_theme_stylebox_override("normal"):
+			_style_start_button(home, Color8(255, 184, 107))
+
 func _ensure_howto_panel() -> Control:
+	var existing := get_node_or_null("HowToPanel")
+	if existing != null and existing is Control:
+		var panel_existing := existing as Control
+		_wire_howto_panel(panel_existing)
+		return panel_existing
+
 	var panel := Control.new()
 	panel.name = "HowToPanel"
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -959,9 +1396,9 @@ func _ensure_howto_panel() -> Control:
 
 	var backdrop := TextureRect.new()
 	backdrop.name = "HowToBackdrop"
-	backdrop.texture = load("res://assets/themes/home_screen.svg") as Texture2D
+	backdrop.texture = load("res://assets/bg/bg_howtoplay.png") as Texture2D
 	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	backdrop.stretch_mode = TextureRect.STRETCH_SCALE
+	_apply_background_cover(backdrop)
 	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(backdrop)
 
@@ -1041,6 +1478,7 @@ func _ensure_howto_panel() -> Control:
 	center.add_child(vbox)
 
 	var body := RichTextLabel.new()
+	body.name = "HowToBody"
 	body.bbcode_enabled = true
 	body.text = howto_text
 	body.fit_content = true
@@ -1073,15 +1511,38 @@ func _ensure_howto_panel() -> Control:
 	home_bar.add_child(home_wrap)
 
 	var home := Button.new()
+	home.name = "HowToHomeButton"
 	home.text = "Home"
 	home.custom_minimum_size = Vector2(160, 44)
 	home.pressed.connect(_on_home_pressed)
 	_style_start_button(home, Color8(255, 184, 107))
 	home_wrap.add_child(home)
 
+	_wire_howto_panel(panel)
 	return panel
 
+func _wire_reset_confirm_popup(panel: Control) -> void:
+	var yes: Button = panel.get_node_or_null("ResetConfirmCenter/ResetConfirmCard/ResetConfirmVBox/ResetConfirmButtons/ResetConfirmYes") as Button
+	if yes != null:
+		if not yes.pressed.is_connected(_on_reset_confirm_yes):
+			yes.pressed.connect(_on_reset_confirm_yes)
+		if not yes.has_theme_stylebox_override("normal"):
+			_style_start_button(yes, Color8(109, 255, 160))
+
+	var no: Button = panel.get_node_or_null("ResetConfirmCenter/ResetConfirmCard/ResetConfirmVBox/ResetConfirmButtons/ResetConfirmNo") as Button
+	if no != null:
+		if not no.pressed.is_connected(_on_reset_confirm_no):
+			no.pressed.connect(_on_reset_confirm_no)
+		if not no.has_theme_stylebox_override("normal"):
+			_style_start_button(no, Color8(255, 122, 122))
+
 func _ensure_reset_confirm_popup() -> Control:
+	var existing := get_node_or_null("ResetConfirmPopup")
+	if existing != null and existing is Control:
+		var panel_existing := existing as Control
+		_wire_reset_confirm_popup(panel_existing)
+		return panel_existing
+
 	var panel := Control.new()
 	panel.name = "ResetConfirmPopup"
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -1090,16 +1551,19 @@ func _ensure_reset_confirm_popup() -> Control:
 	add_child(panel)
 
 	var dim := ColorRect.new()
+	dim.name = "ResetConfirmDim"
 	dim.color = Color(0, 0, 0, 0.5)
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(dim)
 
 	var center := CenterContainer.new()
+	center.name = "ResetConfirmCenter"
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	panel.add_child(center)
 
 	var card := PanelContainer.new()
+	card.name = "ResetConfirmCard"
 	card.custom_minimum_size = Vector2(320, 170)
 	center.add_child(card)
 
@@ -1112,6 +1576,7 @@ func _ensure_reset_confirm_popup() -> Control:
 	card.add_theme_stylebox_override("panel", card_style)
 
 	var vbox := VBoxContainer.new()
+	vbox.name = "ResetConfirmVBox"
 	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -1119,17 +1584,20 @@ func _ensure_reset_confirm_popup() -> Control:
 	card.add_child(vbox)
 
 	var label := Label.new()
+	label.name = "ResetConfirmLabel"
 	label.text = "Reset progress?"
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_child(label)
 
 	var buttons := HBoxContainer.new()
+	buttons.name = "ResetConfirmButtons"
 	buttons.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	buttons.add_theme_constant_override("separation", 10)
 	vbox.add_child(buttons)
 
 	var yes := Button.new()
+	yes.name = "ResetConfirmYes"
 	yes.text = "Yes"
 	yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	yes.pressed.connect(_on_reset_confirm_yes)
@@ -1137,12 +1605,14 @@ func _ensure_reset_confirm_popup() -> Control:
 	buttons.add_child(yes)
 
 	var no := Button.new()
+	no.name = "ResetConfirmNo"
 	no.text = "No"
 	no.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	no.pressed.connect(_on_reset_confirm_no)
 	_style_start_button(no, Color8(255, 122, 122))
 	buttons.add_child(no)
 
+	_wire_reset_confirm_popup(panel)
 	return panel
 
 func _input(event: InputEvent) -> void:
@@ -1190,6 +1660,16 @@ func _handle_release(pos: Vector2) -> void:
 			_show_debug_line(false, swipe_start_cell.x)
 		_start_swipe(false, swipe_start_cell.x, dir)
 
+func _hide_all_blocks() -> void:
+	for y in height:
+		for x in width:
+			var cell: Dictionary = cells[y][x]
+			var block: TextureRect = cell["block"]
+			var tint := block.modulate
+			tint.a = 0.0
+			block.modulate = tint
+			block.visible = false
+
 func _start_swipe(is_row: bool, index: int, dir: int) -> void:
 	if is_animating or not input_enabled:
 		return
@@ -1206,28 +1686,91 @@ func _start_swipe(is_row: bool, index: int, dir: int) -> void:
 	if moves.is_empty():
 		_finalize_swipe(hidden_blocks, ghosts, next_grid, next_locked)
 		return
+	_clear_animation_layer()
 	_prepare_animation_layer()
-	var tween := create_tween()
-	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	var hidden_map: Dictionary = {}
+	var max_duration := 0.0
+	var pending := {"count": moves.size()}
 	for move in moves:
 		var from: Vector2i = move["from"]
 		var to: Vector2i = move["to"]
 		var from_block: TextureRect = cells[from.y][from.x]["block"]
-		var ghost := _ghost_from_tile(from_block)
-		ghost.global_position = from_block.global_position
-		tween.parallel().tween_property(ghost, "global_position", cells[to.y][to.x]["block"].global_position, ANIM_DURATION)
-		ghosts.append(ghost)
-		hidden_blocks.append(from_block)
-		from_block.visible = false
-	tween.finished.connect(_finalize_swipe.bind(hidden_blocks, ghosts, next_grid, next_locked))
+		if is_instance_valid(from_block) and not hidden_map.has(from_block):
+			var start_pos: Vector2 = from_block.global_position
+			hidden_map[from_block] = true
+			hidden_blocks.append({
+				"block": from_block,
+				"top_level": from_block.top_level,
+				"z_index": from_block.z_index,
+				"position": from_block.position
+			})
+			from_block.top_level = true
+			from_block.z_index = 1000
+			from_block.global_position = start_pos
+		var mover: TextureRect = from_block
+		var color_id: int = int(move.get("color", -1))
+		if color_id >= 0 and palette.size() > 0:
+			mover.modulate = palette[color_id % palette.size()]
+			mover.self_modulate = Color(1, 1, 1, 1)
+		var path_var: Variant = move.get("path", [])
+		var path: Array = []
+		if typeof(path_var) == TYPE_ARRAY:
+			path = path_var
+		var points: Array = []
+		if path.size() > 1:
+			points = path
+		else:
+			points = [from, to]
+		var waypoints: Array = []
+		var seg_cells: Array = []
+		var total_cells := 0
+		for i in range(1, points.size()):
+			var p0: Vector2i = points[i - 1]
+			var p1: Vector2i = points[i]
+			waypoints.append(cells[p1.y][p1.x]["block"].global_position)
+			var dist: int = abs(p1.x - p0.x) + abs(p1.y - p0.y)
+			seg_cells.append(dist)
+			total_cells += dist
+		if waypoints.is_empty():
+			waypoints.append(cells[to.y][to.x]["block"].global_position)
+			seg_cells.append(1)
+			total_cells = 1
+		var straight_cells: int = abs(to.x - from.x) + abs(to.y - from.y)
+		if straight_cells <= 0:
+			straight_cells = 1
+		if total_cells <= 0:
+			total_cells = 1
+		var per_cell := ANIM_DURATION / float(total_cells)
+		var move_duration := per_cell * float(total_cells)
+		if move_duration > max_duration:
+			max_duration = move_duration
+		var tween := create_tween()
+		tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		for i in range(waypoints.size()):
+			var wp: Vector2 = waypoints[i]
+			var dist_cells := int(seg_cells[i])
+			if dist_cells <= 0:
+				dist_cells = 1
+			var seg_duration := per_cell * float(dist_cells)
+			tween.tween_property(mover, "global_position", wp, seg_duration)
+		tween.finished.connect(_on_swipe_tween_finished.bind(pending, hidden_blocks, ghosts, next_grid, next_locked))
+	var safety_delay := maxf(ANIM_DURATION, max_duration) + 0.06
+	var timer := get_tree().create_timer(safety_delay)
+	timer.timeout.connect(_on_swipe_timeout.bind(pending, hidden_blocks, ghosts, next_grid, next_locked))
 
 func _finalize_swipe(hidden_blocks: Array, ghosts: Array, next_grid: Array, next_locked: Dictionary) -> void:
+	for block in hidden_blocks:
+		if block is Dictionary and block.has("block"):
+			var node: TextureRect = block["block"]
+			if is_instance_valid(node):
+				node.top_level = bool(block.get("top_level", false))
+				node.z_index = int(block.get("z_index", 0))
+				node.position = block.get("position", Vector2.ZERO)
+		elif is_instance_valid(block):
+			block.visible = true
 	for ghost in ghosts:
 		if is_instance_valid(ghost):
 			ghost.queue_free()
-	for block in hidden_blocks:
-		if is_instance_valid(block):
-			block.visible = true
 	var newly_locked: Array = []
 	for pos in next_locked.keys():
 		if not locked.has(pos):
@@ -1247,15 +1790,35 @@ func _finalize_swipe(hidden_blocks: Array, ghosts: Array, next_grid: Array, next
 		haptic_success()
 		_show_win_celebration()
 		input_enabled = false
+		_record_level_stats()
+		_update_hud()
 		_mark_level_complete()
 		if current_level_in_stage >= 10:
 			_show_stage_complete()
+		else:
+			_start_next_level_countdown()
 	is_animating = false
 	if solving:
 		_continue_solution()
 
+func _on_swipe_tween_finished(pending: Dictionary, hidden_blocks: Array, ghosts: Array, next_grid: Array, next_locked: Dictionary) -> void:
+	pending["count"] = int(pending.get("count", 0)) - 1
+	if int(pending["count"]) <= 0:
+		_finalize_swipe(hidden_blocks, ghosts, next_grid, next_locked)
+
+func _on_swipe_timeout(pending: Dictionary, hidden_blocks: Array, ghosts: Array, next_grid: Array, next_locked: Dictionary) -> void:
+	if not is_animating:
+		return
+	if int(pending.get("count", 0)) <= 0:
+		return
+	_finalize_swipe(hidden_blocks, ghosts, next_grid, next_locked)
+
 func new_level() -> void:
 	moves_made = 0
+	if grid_container != null:
+		grid_container.visible = true
+	_clear_animation_layer()
+	_stop_next_level_countdown()
 	input_enabled = true
 	status_label.text = ""
 	is_animating = false
@@ -1267,6 +1830,10 @@ func new_level() -> void:
 
 func restart_level() -> void:
 	moves_made = 0
+	if grid_container != null:
+		grid_container.visible = true
+	_clear_animation_layer()
+	_stop_next_level_countdown()
 	input_enabled = true
 	status_label.text = ""
 	is_animating = false
@@ -1277,6 +1844,9 @@ func restart_level() -> void:
 	load_level(_level_path_for(current_stage, current_level_in_stage))
 
 func load_level(path: String) -> void:
+	if editor_preview_active and editor_preview_path != "" and path != editor_preview_path:
+		editor_preview_active = false
+		editor_preview_path = ""
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		push_error("Failed to open level: %s" % path)
@@ -1289,6 +1859,8 @@ func load_level(path: String) -> void:
 	current_level_path = path
 	current_level_data = data
 	_clear_hint_cache()
+	_clear_animation_layer()
+	_invalidate_par_if_needed(data)
 	_apply_theme_from_level(data)
 	width = int(data.get("width", 8))
 	height = int(data.get("height", 8))
@@ -1303,6 +1875,7 @@ func load_level(path: String) -> void:
 		grid.append(row)
 	walls.clear()
 	holes.clear()
+	bouncers.clear()
 	locked.clear()
 
 	for wall_value in data.get("walls", []):
@@ -1318,6 +1891,19 @@ func load_level(path: String) -> void:
 		if _in_bounds(pos):
 			holes[pos] = color_id
 
+	for bouncer_value in data.get("bouncers", []):
+		if typeof(bouncer_value) != TYPE_DICTIONARY:
+			continue
+		var pos := _pos_from_value(bouncer_value.get("pos", []))
+		var btype := String(bouncer_value.get("type", "reverse"))
+		if _in_bounds(pos) and not walls.has(pos):
+			var entry := {
+				"type": btype
+			}
+			if bouncer_value.has("strength"):
+				entry["strength"] = int(bouncer_value.get("strength", 0))
+			bouncers[pos] = entry
+
 	for block_value in data.get("blocks", []):
 		if typeof(block_value) != TYPE_DICTIONARY:
 			continue
@@ -1329,6 +1915,8 @@ func load_level(path: String) -> void:
 	_refresh_locked()
 	_build_grid_nodes()
 	_update_tiles()
+	level_start_time_msec = Time.get_ticks_msec()
+	_ensure_level_par_moves(20000)
 	if debug_enabled:
 		var depth := _solve_depth(2500)
 		if depth >= 0:
@@ -1341,6 +1929,72 @@ func load_level(path: String) -> void:
 	_update_hud()
 	_sync_dev_difficulty_ui()
 	_show_game()
+	call_deferred("_animate_level_intro")
+
+func _slide_with_bouncers(start: Vector2i, dir: Vector2i, occupied: Dictionary) -> Vector2i:
+	var pos := start
+	var current_dir := dir
+	var visited: Dictionary = {}
+	var safety := 0
+	while true:
+		var next := pos + current_dir
+		if not _in_bounds(next):
+			break
+		if occupied.has(next):
+			break
+		pos = next
+		safety += 1
+		if safety > width * height * 4:
+			break
+		var state_key := "%d,%d,%d,%d" % [pos.x, pos.y, current_dir.x, current_dir.y]
+		if visited.has(state_key):
+			break
+		visited[state_key] = true
+		if bouncers.has(pos):
+			var entry: Variant = bouncers[pos]
+			var btype := "reverse"
+			if typeof(entry) == TYPE_DICTIONARY:
+				btype = String(entry.get("type", "reverse"))
+			elif typeof(entry) == TYPE_STRING:
+				btype = String(entry)
+			if btype == "reverse":
+				current_dir = -current_dir
+	return pos
+
+func _slide_with_bouncers_path(start: Vector2i, dir: Vector2i, occupied: Dictionary) -> Dictionary:
+	var pos := start
+	var current_dir := dir
+	var points: Array = [start]
+	var visited: Dictionary = {}
+	var safety := 0
+	while true:
+		var next := pos + current_dir
+		if not _in_bounds(next):
+			break
+		if occupied.has(next):
+			break
+		pos = next
+		safety += 1
+		if safety > width * height * 4:
+			break
+		var state_key := "%d,%d,%d,%d" % [pos.x, pos.y, current_dir.x, current_dir.y]
+		if visited.has(state_key):
+			break
+		visited[state_key] = true
+		if bouncers.has(pos):
+			if points.back() != pos:
+				points.append(pos)
+			var entry: Variant = bouncers[pos]
+			var btype := "reverse"
+			if typeof(entry) == TYPE_DICTIONARY:
+				btype = String(entry.get("type", "reverse"))
+			elif typeof(entry) == TYPE_STRING:
+				btype = String(entry)
+			if btype == "reverse":
+				current_dir = -current_dir
+	if points.back() != pos:
+		points.append(pos)
+	return {"target": pos, "points": points}
 
 func _compute_slide(is_row: bool, index: int, dir: int) -> Dictionary:
 	var grid_copy := _clone_grid(grid)
@@ -1350,70 +2004,69 @@ func _compute_slide(is_row: bool, index: int, dir: int) -> Dictionary:
 	if is_row:
 		if index < 0 or index >= height:
 			return {"moved": false, "moves": moves, "grid": grid_copy, "locked": locked_copy}
-		var occupied := {}
+		var occupied: Dictionary = {}
 		for x in width:
 			var pos := Vector2i(x, index)
-			if walls.has(pos) or locked_copy.has(pos):
-				occupied[x] = true
+			if walls.has(pos) or locked_copy.has(pos) or grid_copy[index][x] != -1:
+				occupied[pos] = true
 		var order := range(width - 1, -1, -1) if dir > 0 else range(0, width)
 		for x in order:
 			var pos := Vector2i(x, index)
 			var color_id: int = grid_copy[index][x]
 			if color_id == -1 or locked_copy.has(pos):
 				continue
-			var target: int = x
-			while true:
-				var next := target + dir
-				if next < 0 or next >= width:
-					break
-				if occupied.has(next):
-					break
-				target = next
-			if target != x:
+			occupied.erase(pos)
+			var slide: Dictionary = _slide_with_bouncers_path(pos, Vector2i(dir, 0), occupied)
+			var target_pos: Vector2i = slide["target"]
+			var points: Array = slide["points"]
+			if target_pos != pos:
 				grid_copy[index][x] = -1
-				grid_copy[index][target] = color_id
-				moves.append({"from": pos, "to": Vector2i(target, index), "color": color_id})
+				grid_copy[target_pos.y][target_pos.x] = color_id
+				moves.append({"from": pos, "to": target_pos, "color": color_id, "path": points})
 				moved = true
-			occupied[target] = true
-			var tpos := Vector2i(target, index)
-			if holes.has(tpos) and holes[tpos] == color_id and not locked_copy.has(tpos):
-				locked_copy[tpos] = true
+			elif points.size() > 1:
+				moves.append({"from": pos, "to": target_pos, "color": color_id, "path": points})
+				moved = true
+			occupied[target_pos] = true
+			if holes.has(target_pos) and holes[target_pos] == color_id and not locked_copy.has(target_pos):
+				locked_copy[target_pos] = true
 				moved = true
 	else:
 		if index < 0 or index >= width:
 			return {"moved": false, "moves": moves, "grid": grid_copy, "locked": locked_copy}
-		var occupied := {}
+		var occupied: Dictionary = {}
 		for y in height:
 			var pos := Vector2i(index, y)
-			if walls.has(pos) or locked_copy.has(pos):
-				occupied[y] = true
+			if walls.has(pos) or locked_copy.has(pos) or grid_copy[y][index] != -1:
+				occupied[pos] = true
 		var order := range(height - 1, -1, -1) if dir > 0 else range(0, height)
 		for y in order:
 			var pos := Vector2i(index, y)
 			var color_id: int = grid_copy[y][index]
 			if color_id == -1 or locked_copy.has(pos):
 				continue
-			var target: int = y
-			while true:
-				var next := target + dir
-				if next < 0 or next >= height:
-					break
-				if occupied.has(next):
-					break
-				target = next
-			if target != y:
+			occupied.erase(pos)
+			var slide: Dictionary = _slide_with_bouncers_path(pos, Vector2i(0, dir), occupied)
+			var target_pos: Vector2i = slide["target"]
+			var points: Array = slide["points"]
+			if target_pos != pos:
 				grid_copy[y][index] = -1
-				grid_copy[target][index] = color_id
-				moves.append({"from": pos, "to": Vector2i(index, target), "color": color_id})
+				grid_copy[target_pos.y][target_pos.x] = color_id
+				moves.append({"from": pos, "to": target_pos, "color": color_id, "path": points})
 				moved = true
-			occupied[target] = true
-			var tpos := Vector2i(index, target)
-			if holes.has(tpos) and holes[tpos] == color_id and not locked_copy.has(tpos):
-				locked_copy[tpos] = true
+			elif points.size() > 1:
+				moves.append({"from": pos, "to": target_pos, "color": color_id, "path": points})
+				moved = true
+			occupied[target_pos] = true
+			if holes.has(target_pos) and holes[target_pos] == color_id and not locked_copy.has(target_pos):
+				locked_copy[target_pos] = true
 				moved = true
 	return {"moved": moved, "moves": moves, "grid": grid_copy, "locked": locked_copy}
 
 func _refresh_locked() -> void:
+
+
+
 	for pos in holes.keys():
 		var p: Vector2i = pos
 		if not locked.has(p) and grid[p.y][p.x] == holes[p]:
@@ -1448,7 +2101,21 @@ func _build_grid_nodes() -> void:
 			var base := _make_rect(cell, Color8(45, 45, 55), 0)
 			var hole_outer := _make_rect(cell, Color8(80, 80, 90), 12)
 			var hole_inner := _make_rect(cell, Color8(90, 90, 100), 18)
+			var bouncer_bg := _make_rect(cell, Color8(70, 120, 150), 10)
+			bouncer_bg.visible = false
 			var block := _make_tile(cell, 6)
+			var bouncer_label := Label.new()
+			bouncer_label.text = "R"
+			bouncer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			bouncer_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			bouncer_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+			bouncer_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			bouncer_label.add_theme_font_size_override("font_size", 20)
+			bouncer_label.add_theme_constant_override("outline_size", 2)
+			bouncer_label.add_theme_color_override("font_color", Color(0.9, 1.0, 1.0, 0.9))
+			bouncer_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.4))
+			bouncer_label.visible = false
+			cell.add_child(bouncer_label)
 			var decal := Label.new()
 			decal.text = "★"
 			decal.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1465,14 +2132,18 @@ func _build_grid_nodes() -> void:
 			decal.visible = false
 			cell.add_child(decal)
 			var wall := _make_wall(cell, 0)
+			var frame := _make_frame(cell, Color(0.45, 0.6, 0.95, 0.35), 1)
 			grid_container.add_child(cell)
 			row.append({
 				"base": base,
 				"hole_outer": hole_outer,
 				"hole_inner": hole_inner,
+				"bouncer_bg": bouncer_bg,
+				"bouncer_label": bouncer_label,
 				"decal": decal,
 				"block": block,
 				"wall": wall,
+				"frame": frame,
 				"pulse_active": false,
 				"pulse_tween": null
 			})
@@ -1490,20 +2161,30 @@ func _update_tiles() -> void:
 			var pos := Vector2i(x, y)
 			var cell: Dictionary = cells[y][x]
 			var base: ColorRect = cell["base"]
+			var frame: Panel = cell["frame"]
 			var hole_outer: ColorRect = cell["hole_outer"]
 			var hole_inner: ColorRect = cell["hole_inner"]
+			var bouncer_bg: ColorRect = cell["bouncer_bg"]
+			var bouncer_label: Label = cell["bouncer_label"]
 			var decal: Label = cell["decal"]
 			var block: TextureRect = cell["block"]
 			var wall: TextureRect = cell["wall"]
 			if walls.has(pos):
 				wall.visible = true
 				wall.modulate = wall_tint_contrast if high_contrast else wall_tint
+				wall.self_modulate = Color(1, 1, 1, 1)
+				base.visible = false
+				frame.visible = false
 				hole_outer.visible = false
 				hole_inner.visible = false
+				bouncer_bg.visible = false
+				bouncer_label.visible = false
 				block.visible = false
 				decal.visible = false
 				continue
 			wall.visible = false
+			base.visible = true
+			frame.visible = true
 			if high_contrast:
 				base.color = Color8(32, 32, 40)
 			else:
@@ -1517,6 +2198,22 @@ func _update_tiles() -> void:
 			else:
 				hole_outer.visible = false
 				hole_inner.visible = false
+			if bouncers.has(pos):
+				bouncer_bg.visible = true
+				bouncer_label.visible = true
+				var entry: Variant = bouncers[pos]
+				var btype := "reverse"
+				if typeof(entry) == TYPE_DICTIONARY:
+					btype = String(entry.get("type", "reverse"))
+				elif typeof(entry) == TYPE_STRING:
+					btype = String(entry)
+				if btype == "reverse":
+					bouncer_label.text = "R"
+				else:
+					bouncer_label.text = "B"
+			else:
+				bouncer_bg.visible = false
+				bouncer_label.visible = false
 			var color_id: int = grid[y][x]
 			if color_id != -1:
 				block.modulate = palette[color_id % palette.size()]
@@ -1541,14 +2238,287 @@ func _update_tiles() -> void:
 
 func _update_hud() -> void:
 	var level_text := "Stage %d-%d" % [current_stage, current_level_in_stage]
+	if editor_preview_active:
+		level_text = "Editor Preview"
 	if header_label != null:
 		header_label.text = _rainbow_title(level_text)
 	if subheader_label != null:
-		subheader_label.text = "%s • %s | Moves: %d" % [current_level_name, current_theme_name, moves_made]
+		if editor_preview_active:
+			var elapsed_ms: int = 0
+			if level_start_time_msec > 0:
+				elapsed_ms = maxi(0, Time.get_ticks_msec() - level_start_time_msec)
+			var par_text := "-"
+			if current_level_min_moves >= 0:
+				par_text = str(current_level_min_moves)
+			subheader_label.text = "Moves: %d | Time: %s | Par: %s" % [
+				moves_made,
+				_format_time_ms(elapsed_ms),
+				par_text
+			]
+			if new_level_button != null:
+				new_level_button.visible = false
+			if home_button != null:
+				home_button.visible = false
+			if editor_back_button != null:
+				editor_back_button.visible = true
+			if stages_button != null:
+				stages_button.visible = false
+			return
+		var key: String = _level_key(current_stage, current_level_in_stage)
+		var entry: Dictionary = _get_level_stats_entry(key)
+		var best_moves: int = 0
+		if entry.has("best_moves"):
+			best_moves = int(entry["best_moves"])
+		var best_time_ms: int = 0
+		if entry.has("best_time_ms"):
+			best_time_ms = int(entry["best_time_ms"])
+		var elapsed_ms: int = 0
+		if level_start_time_msec > 0:
+			elapsed_ms = maxi(0, Time.get_ticks_msec() - level_start_time_msec)
+		var time_text: String = _format_time_ms(elapsed_ms)
+		var best_time_text := "--:--"
+		if best_time_ms > 0:
+			best_time_text = _format_time_ms(best_time_ms)
+		var par_text := "-"
+		if current_level_min_moves >= 0:
+			par_text = str(current_level_min_moves)
+		var best_moves_text := "-"
+		if best_moves > 0:
+			best_moves_text = str(best_moves)
+		subheader_label.text = "%s - %s\nMoves: %d | Time: %s | Par: %s | Best: %s/%s" % [
+			current_level_name,
+			current_theme_name,
+			moves_made,
+			time_text,
+			par_text,
+			best_moves_text,
+			best_time_text
+		]
 	if new_level_button != null:
 		var can_advance := _can_advance_level()
 		new_level_button.disabled = not can_advance
 		new_level_button.visible = can_advance
+
+func _reset_next_level_button() -> void:
+	if new_level_button != null:
+		new_level_button.text = "Next Level"
+
+func _update_next_level_button_text() -> void:
+	if new_level_button != null:
+		var value := maxi(0, next_level_countdown_left)
+		new_level_button.text = "Next Level (%d)" % value
+
+func _stop_next_level_countdown() -> void:
+	next_level_countdown_active = false
+	next_level_countdown_left = 0
+	next_level_countdown_token += 1
+	_reset_next_level_button()
+
+func _animate_level_intro() -> void:
+	if grid_container == null or cells.is_empty():
+		return
+	_show_grid_intro_flash()
+	var blocks: Array = []
+	for y in height:
+		for x in width:
+			if grid[y][x] == -1:
+				continue
+			var cell: Dictionary = cells[y][x]
+			var base: ColorRect = cell["base"]
+			var block: TextureRect = cell["block"]
+			if not is_instance_valid(block) or not block.visible:
+				continue
+			if base != null:
+				block.pivot_offset = base.size * 0.5
+			block.scale = Vector2(0.7, 0.7)
+			var color := block.modulate
+			color.a = 0.0
+			block.modulate = color
+			blocks.append({"block": block, "pos": Vector2i(x, y)})
+	level_intro_running = true
+	input_enabled = false
+	var tween: Tween = create_tween()
+	tween.set_parallel()
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	for entry in blocks:
+		var block: TextureRect = entry["block"]
+		var pos: Vector2i = entry["pos"]
+		var delay := float(pos.x + pos.y) * 0.015
+		tween.tween_property(block, "scale", Vector2.ONE, 0.6).set_delay(delay)
+		tween.tween_property(block, "modulate:a", 1.0, 0.6).set_delay(delay)
+	tween.finished.connect(func() -> void:
+		level_intro_running = false
+		if not is_animating:
+			input_enabled = true
+	)
+
+func _show_grid_intro_flash() -> void:
+	if grid_container == null:
+		return
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_prepare_animation_layer()
+	var rect := _grid_bounds_rect_snapped()
+	if rect.size == Vector2.ZERO:
+		return
+	var flash := ColorRect.new()
+	flash.name = "GridIntroFlash"
+	flash.color = Color(0.08, 0.12, 0.2, 0.75)
+	flash.top_level = false
+	flash.z_index = 1200
+	flash.position = rect.position
+	flash.size = rect.size
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	animation_layer.add_child(flash)
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(flash, "color:a", 0.0, 1.1)
+	tween.finished.connect(flash.queue_free)
+
+func _grid_bounds_rect_snapped() -> Rect2:
+	if cells.is_empty():
+		return Rect2()
+	var first: Dictionary = cells[0][0]
+	var base: ColorRect = first["base"]
+	if base == null:
+		return Rect2()
+	var rect: Rect2 = base.get_global_rect()
+	for y in height:
+		for x in width:
+			var cell: Dictionary = cells[y][x]
+			var cell_base: ColorRect = cell["base"]
+			if cell_base == null:
+				continue
+			rect = rect.merge(cell_base.get_global_rect())
+	var pos := Vector2(floor(rect.position.x), floor(rect.position.y))
+	var end := Vector2(floor(rect.position.x + rect.size.x), floor(rect.position.y + rect.size.y))
+	rect.position = pos
+	rect.size = Vector2(maxf(0.0, end.x - pos.x), maxf(0.0, end.y - pos.y))
+	return rect
+
+func _start_next_level_countdown() -> void:
+	if editor_preview_active:
+		return
+	if current_level_in_stage >= 10:
+		return
+	if not _can_advance_level():
+		return
+	if new_level_button == null:
+		return
+	_stop_next_level_countdown()
+	next_level_countdown_active = true
+	next_level_countdown_left = 5
+	next_level_countdown_token += 1
+	var token: int = next_level_countdown_token
+	new_level_button.visible = true
+	_update_next_level_button_text()
+	_schedule_next_level_tick(token)
+
+func _schedule_next_level_tick(token: int) -> void:
+	var timer := get_tree().create_timer(1.0)
+	timer.timeout.connect(func() -> void:
+		if token != next_level_countdown_token:
+			return
+		if not next_level_countdown_active:
+			return
+		next_level_countdown_left -= 1
+		if next_level_countdown_left <= 0:
+			next_level_countdown_active = false
+			_reset_next_level_button()
+			_on_new_level_pressed()
+			return
+		_update_next_level_button_text()
+		_schedule_next_level_tick(token)
+	)
+
+func _level_key(stage: int, level: int) -> String:
+	return "%d-%d" % [stage, level]
+
+func _get_level_stats_entry(key: String) -> Dictionary:
+	var entry: Dictionary = {}
+	if level_stats.has(key):
+		var entry_value: Variant = level_stats[key]
+		if typeof(entry_value) == TYPE_DICTIONARY:
+			entry = entry_value
+	return entry
+
+func _format_time_ms(ms: int) -> String:
+	var safe_ms: int = maxi(0, ms)
+	var total_sec := int(safe_ms / 1000)
+	var minutes := int(total_sec / 60)
+	var seconds := int(total_sec % 60)
+	return "%02d:%02d" % [minutes, seconds]
+
+func _ensure_level_par_moves(max_states: int) -> void:
+	current_level_min_moves = -1
+	var key: String = _level_key(current_stage, current_level_in_stage)
+	var entry: Dictionary = _get_level_stats_entry(key)
+	if entry.has("par_moves"):
+		current_level_min_moves = int(entry["par_moves"])
+		return
+	var result: Dictionary = _solve_level_status(max_states)
+	var capped_var: Variant = result.get("capped", false)
+	var capped := bool(capped_var)
+	var path_var: Variant = result.get("path", [])
+	var path: Array = []
+	if typeof(path_var) == TYPE_ARRAY:
+		path = path_var
+	if not capped and _grid_is_win(grid):
+		current_level_min_moves = 0
+		entry["par_moves"] = current_level_min_moves
+		entry["par_version"] = 1
+		level_stats[key] = entry
+		_save_progress()
+	elif not capped and not path.is_empty():
+		current_level_min_moves = path.size()
+		entry["par_moves"] = current_level_min_moves
+		entry["par_version"] = 1
+		level_stats[key] = entry
+		_save_progress()
+
+func _invalidate_par_if_needed(data: Dictionary) -> void:
+	var bval: Variant = data.get("bouncers", [])
+	if typeof(bval) != TYPE_ARRAY or bval.is_empty():
+		return
+	var key: String = _level_key(current_stage, current_level_in_stage)
+	if not level_stats.has(key):
+		return
+	var entry_var: Variant = level_stats[key]
+	if typeof(entry_var) != TYPE_DICTIONARY:
+		return
+	var entry: Dictionary = entry_var
+	if not entry.has("par_moves"):
+		return
+	var version := int(entry.get("par_version", 0))
+	if version >= 1:
+		return
+	entry.erase("par_moves")
+	entry.erase("par_version")
+	level_stats[key] = entry
+	_save_progress()
+
+func _record_level_stats() -> void:
+	var key: String = _level_key(current_stage, current_level_in_stage)
+	var entry: Dictionary = _get_level_stats_entry(key)
+	var elapsed_ms: int = 0
+	if level_start_time_msec > 0:
+		elapsed_ms = maxi(0, Time.get_ticks_msec() - level_start_time_msec)
+	entry["last_moves"] = moves_made
+	entry["last_time_ms"] = elapsed_ms
+	if current_level_min_moves >= 0:
+		entry["par_moves"] = current_level_min_moves
+	var best_moves: int = 0
+	if entry.has("best_moves"):
+		best_moves = int(entry["best_moves"])
+	if best_moves <= 0 or moves_made < best_moves:
+		entry["best_moves"] = moves_made
+	var best_time_ms: int = 0
+	if entry.has("best_time_ms"):
+		best_time_ms = int(entry["best_time_ms"])
+	if best_time_ms <= 0 or elapsed_ms < best_time_ms:
+		entry["best_time_ms"] = elapsed_ms
+	level_stats[key] = entry
+	_save_progress()
 
 func _can_advance_level() -> bool:
 	var completed: int = int(stage_progress.get(str(current_stage), 0))
@@ -1605,6 +2575,21 @@ func _make_rect(parent: Control, color: Color, padding: float) -> ColorRect:
 	parent.add_child(rect)
 	return rect
 
+func _make_frame(parent: Control, color: Color, thickness: int) -> Panel:
+	var panel := Panel.new()
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0, 0, 0, 0)
+	style.border_color = color
+	style.border_width_left = thickness
+	style.border_width_right = thickness
+	style.border_width_top = thickness
+	style.border_width_bottom = thickness
+	panel.add_theme_stylebox_override("panel", style)
+	parent.add_child(panel)
+	return panel
+
 func _make_tile(parent: Control, padding: float) -> TextureRect:
 	var rect := TextureRect.new()
 	rect.texture = tile_texture
@@ -1621,7 +2606,8 @@ func _make_tile(parent: Control, padding: float) -> TextureRect:
 func _make_wall(parent: Control, padding: float) -> TextureRect:
 	var rect := TextureRect.new()
 	rect.texture = wall_texture
-	rect.stretch_mode = TextureRect.STRETCH_SCALE
+	rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	rect.offset_left = padding
 	rect.offset_top = padding
@@ -1704,12 +2690,12 @@ func _apply_difficulty_from_level(data: Dictionary, max_states: int) -> void:
 	current_difficulty_label = ""
 	var manual_label: Variant = data.get("difficulty_label", null)
 	if manual_label is String and String(manual_label) != "":
-		current_difficulty_label = String(manual_label)
+		current_difficulty_label = _normalize_difficulty_label(String(manual_label))
 		level_difficulty_text = "Diff: %s" % current_difficulty_label
 		return
 	var analysis := _analyze_difficulty(max_states)
 	if analysis.has("label"):
-		current_difficulty_label = String(analysis["label"])
+		current_difficulty_label = _normalize_difficulty_label(String(analysis["label"]))
 		level_difficulty_text = "Diff: %s" % current_difficulty_label
 
 func _simulate_slide(source: Array, is_row: bool, index: int, dir: int) -> Dictionary:
@@ -1719,68 +2705,56 @@ func _simulate_slide(source: Array, is_row: bool, index: int, dir: int) -> Dicti
 	if is_row:
 		if index < 0 or index >= height:
 			return {"moved": false, "grid": grid_copy}
-		var occupied := {}
+		var occupied: Dictionary = {}
 		for x in width:
 			var pos := Vector2i(x, index)
-			if walls.has(pos) or locked_copy.has(pos):
-				occupied[x] = true
+			if walls.has(pos) or locked_copy.has(pos) or grid_copy[index][x] != -1:
+				occupied[pos] = true
 		var order := range(width - 1, -1, -1) if dir > 0 else range(0, width)
 		for x in order:
 			var pos := Vector2i(x, index)
 			var color_id: int = grid_copy[index][x]
 			if color_id == -1 or locked_copy.has(pos):
 				continue
-			var target: int = x
-			while true:
-				var next := target + dir
-				if next < 0 or next >= width:
-					break
-				if occupied.has(next):
-					break
-				target = next
-			if target != x:
+			occupied.erase(pos)
+			var target_pos := _slide_with_bouncers(pos, Vector2i(dir, 0), occupied)
+			if target_pos != pos:
 				grid_copy[index][x] = -1
-				grid_copy[index][target] = color_id
+				grid_copy[target_pos.y][target_pos.x] = color_id
 				moved = true
-			occupied[target] = true
-			var tpos := Vector2i(target, index)
-			if holes.has(tpos) and holes[tpos] == color_id and not locked_copy.has(tpos):
-				locked_copy[tpos] = true
+			occupied[target_pos] = true
+			if holes.has(target_pos) and holes[target_pos] == color_id and not locked_copy.has(target_pos):
+				locked_copy[target_pos] = true
 				moved = true
 	else:
 		if index < 0 or index >= width:
 			return {"moved": false, "grid": grid_copy}
-		var occupied := {}
+		var occupied: Dictionary = {}
 		for y in height:
 			var pos := Vector2i(index, y)
-			if walls.has(pos) or locked_copy.has(pos):
-				occupied[y] = true
+			if walls.has(pos) or locked_copy.has(pos) or grid_copy[y][index] != -1:
+				occupied[pos] = true
 		var order := range(height - 1, -1, -1) if dir > 0 else range(0, height)
 		for y in order:
 			var pos := Vector2i(index, y)
 			var color_id: int = grid_copy[y][index]
 			if color_id == -1 or locked_copy.has(pos):
 				continue
-			var target: int = y
-			while true:
-				var next := target + dir
-				if next < 0 or next >= height:
-					break
-				if occupied.has(next):
-					break
-				target = next
-			if target != y:
+			occupied.erase(pos)
+			var target_pos := _slide_with_bouncers(pos, Vector2i(0, dir), occupied)
+			if target_pos != pos:
 				grid_copy[y][index] = -1
-				grid_copy[target][index] = color_id
+				grid_copy[target_pos.y][target_pos.x] = color_id
 				moved = true
-			occupied[target] = true
-			var tpos := Vector2i(index, target)
-			if holes.has(tpos) and holes[tpos] == color_id and not locked_copy.has(tpos):
-				locked_copy[tpos] = true
+			occupied[target_pos] = true
+			if holes.has(target_pos) and holes[target_pos] == color_id and not locked_copy.has(target_pos):
+				locked_copy[target_pos] = true
 				moved = true
 	return {"moved": moved, "grid": grid_copy}
 
 func _locked_from_grid(source: Array) -> Dictionary:
+
+
 	var out: Dictionary = {}
 	for pos in holes.keys():
 		var p: Vector2i = pos
@@ -1887,6 +2861,13 @@ func _prepare_animation_layer() -> void:
 	animation_layer.size = get_viewport_rect().size
 	animation_layer.position = Vector2.ZERO
 
+func _clear_animation_layer() -> void:
+	if animation_layer == null:
+		return
+	hide_blocks_for_anim = false
+	for child in animation_layer.get_children():
+		child.queue_free()
+
 func _prepare_debug_layer() -> void:
 	debug_layer.size = get_viewport_rect().size
 	debug_layer.position = Vector2.ZERO
@@ -1913,6 +2894,8 @@ func _ghost_from_tile(tile: TextureRect) -> TextureRect:
 	ghost.z_as_relative = false
 	ghost.modulate = tile.modulate
 	ghost.self_modulate = tile.self_modulate
+	ghost.material = tile.material
+	ghost.use_parent_material = tile.use_parent_material
 	animation_layer.add_child(ghost)
 	return ghost
 
@@ -1975,6 +2958,8 @@ func _animate_solved_positions(positions: Array) -> void:
 
 func _show_win_celebration() -> void:
 	_prepare_animation_layer()
+	if grid_container != null:
+		grid_container.visible = false
 	var overlay := Control.new()
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -1982,7 +2967,14 @@ func _show_win_celebration() -> void:
 	overlay.z_as_relative = false
 	animation_layer.add_child(overlay)
 
-	var grid_rect := grid_container.get_global_rect()
+	var tiles_layer := Control.new()
+	tiles_layer.name = "WinTiles"
+	tiles_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tiles_layer.z_index = 1090
+	tiles_layer.z_as_relative = false
+	overlay.add_child(tiles_layer)
+
+	var grid_rect: Rect2 = grid_container.get_global_rect()
 	var banner_box := PanelContainer.new()
 	banner_box.name = "WinBanner"
 	banner_box.size = Vector2(grid_rect.size.x * 0.8, 64)
@@ -2012,22 +3004,18 @@ func _show_win_celebration() -> void:
 	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tween.tween_property(banner_box, "modulate", Color(1, 1, 1, 1), 0.2)
 	tween.parallel().tween_property(banner, "scale", Vector2(1.05, 1.05), 0.2).from(Vector2(0.9, 0.9))
-	tween.tween_interval(1.4)
+	tween.tween_interval(2.2)
 	tween.tween_property(banner_box, "modulate", Color(1, 1, 1, 0), 0.45)
-	tween.finished.connect(overlay.queue_free)
 
-	_spawn_confetti(overlay)
-	var timer1 := get_tree().create_timer(0.35)
-	timer1.timeout.connect(_spawn_confetti.bind(overlay))
-	var timer2 := get_tree().create_timer(0.7)
-	timer2.timeout.connect(_spawn_confetti.bind(overlay))
-	var timer3 := get_tree().create_timer(1.05)
-	timer3.timeout.connect(_spawn_confetti.bind(overlay))
+	var effect_duration: float = _play_win_grid_effect(tiles_layer)
+	var overlay_duration: float = maxf(effect_duration + 1.0, 3.2)
+	var cleanup_timer := get_tree().create_timer(overlay_duration)
+	cleanup_timer.timeout.connect(overlay.queue_free)
 
 func _spawn_confetti(parent: Control) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
-	var rect := grid_container.get_global_rect()
+	var rect: Rect2 = grid_container.get_global_rect()
 	for i in range(45):
 		var piece := ColorRect.new()
 		piece.color = palette[i % palette.size()] if palette.size() > 0 else Color8(220, 220, 220)
@@ -2048,7 +3036,110 @@ func _spawn_confetti(parent: Control) -> void:
 		tween.parallel().tween_property(piece, "modulate", Color(1, 1, 1, 0), 0.9).from(Color(1, 1, 1, 1))
 		tween.finished.connect(piece.queue_free)
 
-func _show_debug_line(is_row: bool, index: int) -> void:
+func _play_win_grid_effect(layer: Control) -> float:
+	if cells.is_empty():
+		return 0.0
+	var tiles: Array[Control] = _collect_win_tiles(layer)
+	if tiles.is_empty():
+		return 0.0
+	var effect: int = win_rng.randi_range(0, 3)
+	if effect == 0:
+		return _win_vortex(tiles)
+	if effect == 1:
+		return _win_shatter(tiles)
+	if effect == 2:
+		return _win_drop(tiles)
+	return _win_wave(tiles)
+
+func _collect_win_tiles(layer: Control) -> Array[Control]:
+	var out: Array[Control] = []
+	for y in height:
+		for x in width:
+			var cell: Dictionary = cells[y][x]
+			var base: ColorRect = cell["base"]
+			var block: TextureRect = cell["block"]
+			var wall: TextureRect = cell["wall"]
+			if base == null:
+				continue
+			var color: Color = base.color
+			if wall.visible:
+				color = wall_tint
+			elif block.visible:
+				color = block.modulate
+			var tile := ColorRect.new()
+			tile.color = color
+			tile.size = base.size
+			tile.custom_minimum_size = base.size
+			tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			tile.z_index = 1090
+			tile.z_as_relative = false
+			layer.add_child(tile)
+			tile.global_position = base.global_position
+			tile.pivot_offset = base.size * 0.5
+			out.append(tile)
+	return out
+
+func _win_vortex(tiles: Array[Control]) -> float:
+	var rect: Rect2 = grid_container.get_global_rect()
+	var center: Vector2 = rect.position + rect.size * 0.5
+	var max_span: float = maxf(rect.size.x, rect.size.y)
+	var max_delay: float = 0.0
+	for tile in tiles:
+		var dist: float = tile.global_position.distance_to(center)
+		var delay: float = (dist / max_span) * 0.35
+		max_delay = maxf(max_delay, delay)
+		var tween := create_tween()
+		tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		var target := center - tile.size * 0.5
+		tween.tween_property(tile, "global_position", target, 1.0).set_delay(delay)
+		tween.parallel().tween_property(tile, "scale", Vector2(0.05, 0.05), 1.0).set_delay(delay)
+		tween.parallel().tween_property(tile, "modulate:a", 0.0, 1.0).set_delay(delay)
+		tween.parallel().tween_property(tile, "rotation", win_rng.randf_range(-PI, PI), 1.0).set_delay(delay)
+		tween.finished.connect(tile.queue_free)
+	return 1.0 + max_delay
+
+func _win_shatter(tiles: Array[Control]) -> float:
+	var max_delay: float = 0.0
+	for tile in tiles:
+		var delay: float = win_rng.randf_range(0.0, 0.3)
+		max_delay = maxf(max_delay, delay)
+		var tween := create_tween()
+		tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tween.tween_property(tile, "scale", Vector2(1.25, 1.25), 0.3).from(Vector2.ONE).set_delay(delay)
+		tween.parallel().tween_property(tile, "modulate:a", 0.0, 0.7).set_delay(delay + 0.15)
+		tween.parallel().tween_property(tile, "scale", Vector2(0.0, 0.0), 0.7).set_delay(delay + 0.15)
+		tween.finished.connect(tile.queue_free)
+	return 1.0 + max_delay
+
+func _win_drop(tiles: Array[Control]) -> float:
+	var rect: Rect2 = grid_container.get_global_rect()
+	var max_delay: float = 0.0
+	for tile in tiles:
+		var row_ratio: float = clampf((tile.global_position.y - rect.position.y) / rect.size.y, 0.0, 1.0)
+		var delay: float = row_ratio * 0.4
+		max_delay = maxf(max_delay, delay)
+		var target := tile.global_position + Vector2(win_rng.randf_range(-40.0, 40.0), rect.size.y + 160.0)
+		var tween := create_tween()
+		tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tween.tween_property(tile, "global_position", target, 1.1).set_delay(delay)
+		tween.parallel().tween_property(tile, "modulate:a", 0.0, 1.1).set_delay(delay)
+		tween.finished.connect(tile.queue_free)
+	return 1.1 + max_delay
+
+func _win_wave(tiles: Array[Control]) -> float:
+	var rect: Rect2 = grid_container.get_global_rect()
+	var max_delay: float = 0.0
+	for tile in tiles:
+		var row_ratio: float = clampf((tile.global_position.y - rect.position.y) / rect.size.y, 0.0, 1.0)
+		var delay: float = row_ratio * 0.5
+		max_delay = maxf(max_delay, delay)
+		var tween := create_tween()
+		tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tween.tween_property(tile, "modulate:a", 0.0, 0.9).set_delay(delay)
+		tween.parallel().tween_property(tile, "scale", Vector2(0.7, 0.7), 0.9).set_delay(delay)
+		tween.finished.connect(tile.queue_free)
+	return 0.9 + max_delay
+func _show_debug_line(is_row: bool, index: int, dir: int = 0, duration: float = 0.25) -> void:
 	_prepare_debug_layer()
 	_clear_children(debug_layer)
 	if is_row:
@@ -2059,8 +3150,80 @@ func _show_debug_line(is_row: bool, index: int) -> void:
 		for y in height:
 			var pos := Vector2i(index, y)
 			_add_debug_cell(pos)
-	var timer := get_tree().create_timer(0.25)
+	if dir != 0:
+		_add_debug_chevrons(is_row, index, dir)
+	var timer := get_tree().create_timer(duration)
 	timer.timeout.connect(_hide_debug)
+
+func _add_debug_chevrons(is_row: bool, index: int, dir: int) -> void:
+	if cells.is_empty():
+		return
+	var glass := StyleBoxFlat.new()
+	glass.bg_color = Color(0.78, 0.9, 1.0, 0.2)
+	glass.border_color = Color(1, 1, 1, 0.4)
+	glass.border_width_left = 2
+	glass.border_width_right = 2
+	glass.border_width_top = 2
+	glass.border_width_bottom = 2
+	glass.corner_radius_top_left = 14
+	glass.corner_radius_top_right = 14
+	glass.corner_radius_bottom_left = 14
+	glass.corner_radius_bottom_right = 14
+	glass.shadow_color = Color(0, 0, 0, 0.3)
+	glass.shadow_size = 10
+	glass.shadow_offset = Vector2(0, 4)
+	var grid_rect: Rect2 = grid_container.get_global_rect()
+	if is_row:
+		if index < 0 or index >= height:
+			return
+		var cell: Dictionary = cells[index][0]
+		var panel := PanelContainer.new()
+		panel.size = Vector2(grid_rect.size.x, cell_size)
+		panel.custom_minimum_size = panel.size
+		panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_theme_stylebox_override("panel", glass)
+		panel.z_index = 905
+		debug_layer.add_child(panel)
+		panel.global_position = Vector2(grid_rect.position.x, cell["base"].global_position.y)
+		var label := Label.new()
+		var chevrons := ">" if dir > 0 else "<"
+		label.text = chevrons.repeat(3)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.set_anchors_preset(Control.PRESET_FULL_RECT)
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		label.add_theme_font_size_override("font_size", 22)
+		label.add_theme_constant_override("outline_size", 2)
+		label.add_theme_color_override("font_color", Color(0.9, 0.95, 1.0, 0.95))
+		label.add_theme_color_override("font_outline_color", Color(0.1, 0.2, 0.35, 0.7))
+		panel.add_child(label)
+	else:
+		if index < 0 or index >= width:
+			return
+		var cell: Dictionary = cells[0][index]
+		var arrow := "v" if dir > 0 else "^"
+		var lines: Array[String] = []
+		for _i in 3:
+			lines.append(arrow)
+		var panel := PanelContainer.new()
+		panel.size = Vector2(cell_size, grid_rect.size.y)
+		panel.custom_minimum_size = panel.size
+		panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_theme_stylebox_override("panel", glass)
+		panel.z_index = 905
+		debug_layer.add_child(panel)
+		panel.global_position = Vector2(cell["base"].global_position.x, grid_rect.position.y)
+		var label := Label.new()
+		label.text = "\n".join(lines)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.set_anchors_preset(Control.PRESET_FULL_RECT)
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		label.add_theme_font_size_override("font_size", 18)
+		label.add_theme_constant_override("outline_size", 2)
+		label.add_theme_color_override("font_color", Color(0.9, 0.95, 1.0, 0.95))
+		label.add_theme_color_override("font_outline_color", Color(0.1, 0.2, 0.35, 0.7))
+		panel.add_child(label)
 
 func _add_debug_cell(pos: Vector2i) -> void:
 	var cell: Dictionary = cells[pos.y][pos.x]
@@ -2118,6 +3281,7 @@ func _mark_level_complete() -> void:
 
 func _load_progress() -> void:
 	stage_progress = {}
+	level_stats = {}
 	unlocked_stage = 1
 	if not FileAccess.file_exists(SAVE_PATH):
 		return
@@ -2133,11 +3297,18 @@ func _load_progress() -> void:
 	if typeof(prog) == TYPE_DICTIONARY:
 		for key in prog.keys():
 			stage_progress[str(key)] = int(prog[key])
+	var stats: Variant = data.get("level_stats", {})
+	if typeof(stats) == TYPE_DICTIONARY:
+		for key in stats.keys():
+			var entry: Variant = stats[key]
+			if typeof(entry) == TYPE_DICTIONARY:
+				level_stats[str(key)] = entry
 
 func _save_progress() -> void:
 	var data := {
 		"unlocked_stage": unlocked_stage,
-		"stage_progress": stage_progress
+		"stage_progress": stage_progress,
+		"level_stats": level_stats
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -2179,98 +3350,41 @@ func _save_settings() -> void:
 		return
 	file.store_string(JSON.stringify(data))
 
-func _ensure_stage_panel() -> Control:
-	var panel := Control.new()
-	panel.name = "StagePanel"
-	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(panel)
+func _wire_stage_panel(panel: Control) -> void:
+	var backdrop: TextureRect = panel.get_node_or_null("StageBackdrop") as TextureRect
+	if backdrop != null and backdrop.texture == null:
+		backdrop.texture = load("res://assets/bg/bg_stageselect.png") as Texture2D
+	if backdrop != null:
+		_apply_background_cover(backdrop)
 
-	var backdrop := ColorRect.new()
-	backdrop.name = "StageBackdrop"
-	backdrop.color = Color(0.08, 0.1, 0.14, 0.9)
-	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_child(backdrop)
+	var title: RichTextLabel = panel.get_node_or_null("StagePanelVBox/StageTitleWrap/StageTitle") as RichTextLabel
+	if title != null and title.text.strip_edges() == "":
+		title.bbcode_enabled = true
+		title.fit_content = true
+		title.scroll_active = false
+		title.autowrap_mode = TextServer.AUTOWRAP_OFF
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		title.text = _rainbow_title("Select Stage")
 
-	var vignette := ColorRect.new()
-	vignette.name = "StageVignette"
-	vignette.color = Color(0, 0, 0, 0.18)
-	vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_child(vignette)
+	var grid := panel.get_node_or_null("StagePanelVBox/StageGridMargin/StageGrid") as GridContainer
+	if grid == null:
+		grid = panel.get_node_or_null("StagePanelVBox/StageGridMargin/StageGridScroll/StageGrid") as GridContainer
+	if grid != null:
+		_populate_stage_grid(grid)
 
-	var vbox := VBoxContainer.new()
-	vbox.name = "StagePanelVBox"
-	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_theme_constant_override("separation", 12)
-	panel.add_child(vbox)
+	var home: Button = panel.get_node_or_null("StageHomeBar/StageHomeWrap/StageHomeButton") as Button
+	if home != null:
+		if not home.pressed.is_connected(_on_home_pressed):
+			home.pressed.connect(_on_home_pressed)
+		if not home.has_theme_stylebox_override("normal"):
+			_style_start_button(home, Color8(83, 201, 255))
 
-	var top := HBoxContainer.new()
-	top.name = "StageTopBar"
-	top.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_theme_constant_override("separation", 8)
-	vbox.add_child(top)
-
-	var top_spacer := Control.new()
-	top_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(top_spacer)
-
-	var title_wrap := CenterContainer.new()
-	title_wrap.name = "StageTitleWrap"
-	title_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_wrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	title_wrap.custom_minimum_size = Vector2(0, 140)
-	vbox.add_child(title_wrap)
-
-	var title := RichTextLabel.new()
-	title.name = "StageTitle"
-	title.bbcode_enabled = true
-	title.fit_content = true
-	title.scroll_active = false
-	title.autowrap_mode = TextServer.AUTOWRAP_OFF
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.text = _rainbow_title("Select Stage")
-	title.add_theme_font_size_override("normal_font_size", 46)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	title_wrap.add_child(title)
-
-	var grid_spacer := Control.new()
-	grid_spacer.name = "StageGridSpacer"
-	grid_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_child(grid_spacer)
-
-	var grid_margin := MarginContainer.new()
-	grid_margin.name = "StageGridMargin"
-	grid_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid_margin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	grid_margin.add_theme_constant_override("margin_left", 12)
-	grid_margin.add_theme_constant_override("margin_right", 12)
-	grid_margin.add_theme_constant_override("margin_top", 20)
-	grid_margin.add_theme_constant_override("margin_bottom", 24)
-	vbox.add_child(grid_margin)
-
-	var grid := GridContainer.new()
-	grid.name = "StageGrid"
-	grid.columns = STAGE_GRID_COLUMNS
-	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var hsep := 36
-	var vsep := 28
-	grid.add_theme_constant_override("hseparation", hsep)
-	grid.add_theme_constant_override("vseparation", vsep)
-	var rows := int(ceil(10.0 / float(grid.columns)))
-	var col_gaps := maxi(0, STAGE_GRID_COLUMNS - 1)
-	var row_gaps := maxi(0, rows - 1)
-	var grid_width: float = float(STAGE_GRID_COLUMNS * STAGE_CARD_HEIGHT + col_gaps * hsep)
-	var grid_height: float = float(rows * STAGE_CARD_HEIGHT + row_gaps * vsep)
-	grid.custom_minimum_size = Vector2(grid_width, grid_height)
-	grid_margin.add_child(grid)
-
+func _populate_stage_grid(grid: GridContainer) -> void:
+	if grid.get_child_count() > 0:
+		return
+	if grid.columns <= 0:
+		grid.columns = STAGE_GRID_COLUMNS
 	for i in range(1, 11):
 		var btn := Button.new()
 		btn.name = "StageButton%d" % i
@@ -2333,6 +3447,107 @@ func _ensure_stage_panel() -> Control:
 		lock_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		lock_label.visible = false
 		content.add_child(lock_label)
+
+func _ensure_stage_panel() -> Control:
+	var existing := get_node_or_null("StagePanel")
+	if existing != null and existing is Control:
+		var panel_existing := existing as Control
+		_wire_stage_panel(panel_existing)
+		return panel_existing
+
+	var panel := Control.new()
+	panel.name = "StagePanel"
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(panel)
+
+	var backdrop := TextureRect.new()
+	backdrop.name = "StageBackdrop"
+	backdrop.texture = load("res://assets/bg/bg_stageselect.png") as Texture2D
+	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_apply_background_cover(backdrop)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(backdrop)
+
+	var vignette := ColorRect.new()
+	vignette.name = "StageVignette"
+	vignette.color = Color(0, 0, 0, 0.18)
+	vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(vignette)
+
+	var vbox := VBoxContainer.new()
+	vbox.name = "StagePanelVBox"
+	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_theme_constant_override("separation", 18)
+	panel.add_child(vbox)
+
+	var top := HBoxContainer.new()
+	top.name = "StageTopBar"
+	top.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_theme_constant_override("separation", 8)
+	vbox.add_child(top)
+
+	var top_spacer := Control.new()
+	top_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(top_spacer)
+
+	var title_wrap := CenterContainer.new()
+	title_wrap.name = "StageTitleWrap"
+	title_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_wrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	title_wrap.custom_minimum_size = Vector2(0, 140)
+	vbox.add_child(title_wrap)
+
+	var title := RichTextLabel.new()
+	title.name = "StageTitle"
+	title.bbcode_enabled = true
+	title.fit_content = true
+	title.scroll_active = false
+	title.autowrap_mode = TextServer.AUTOWRAP_OFF
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.text = _rainbow_title("Select Stage")
+	title.add_theme_font_size_override("normal_font_size", 46)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	title_wrap.add_child(title)
+
+	var grid_spacer := Control.new()
+	grid_spacer.name = "StageGridSpacer"
+	grid_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(grid_spacer)
+
+	var grid_margin := MarginContainer.new()
+	grid_margin.name = "StageGridMargin"
+	grid_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid_margin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	grid_margin.add_theme_constant_override("margin_left", 16)
+	grid_margin.add_theme_constant_override("margin_right", 16)
+	grid_margin.add_theme_constant_override("margin_top", 32)
+	grid_margin.add_theme_constant_override("margin_bottom", 32)
+	vbox.add_child(grid_margin)
+
+	var grid := GridContainer.new()
+	grid.name = "StageGrid"
+	grid.columns = STAGE_GRID_COLUMNS
+	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var hsep := 48
+	var vsep := 40
+	grid.add_theme_constant_override("hseparation", hsep)
+	grid.add_theme_constant_override("vseparation", vsep)
+	var rows := int(ceil(10.0 / float(grid.columns)))
+	var col_gaps := maxi(0, STAGE_GRID_COLUMNS - 1)
+	var row_gaps := maxi(0, rows - 1)
+	var grid_width: float = float(STAGE_GRID_COLUMNS * STAGE_CARD_HEIGHT + col_gaps * hsep)
+	var grid_height: float = float(rows * STAGE_CARD_HEIGHT + row_gaps * vsep)
+	grid.custom_minimum_size = Vector2(grid_width, grid_height)
+	grid_margin.add_child(grid)
+
+	_populate_stage_grid(grid)
 	var spacer := Control.new()
 	spacer.name = "StageSpacer"
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -2359,6 +3574,7 @@ func _ensure_stage_panel() -> Control:
 	home.pressed.connect(_on_home_pressed)
 	_style_start_button(home, Color8(83, 201, 255))
 	home_wrap.add_child(home)
+	_wire_stage_panel(panel)
 	return panel
 
 func _update_stage_buttons() -> void:
@@ -2389,6 +3605,73 @@ func _update_stage_buttons() -> void:
 			lock_label.visible = locked
 			lock_label.text = "Locked" if locked else ""
 
+func _wire_level_panel(panel: Control) -> void:
+	var backdrop: TextureRect = panel.get_node_or_null("LevelBackdrop") as TextureRect
+	if backdrop != null and backdrop.texture == null:
+		backdrop.texture = load("res://assets/bg/bg_levelselect.png") as Texture2D
+	if backdrop != null:
+		_apply_background_cover(backdrop)
+
+	var title: RichTextLabel = panel.get_node_or_null("LevelPanelVBox/LevelTitleWrap/LevelTitle") as RichTextLabel
+	if title != null and title.text.strip_edges() == "":
+		title.bbcode_enabled = true
+		title.fit_content = true
+		title.scroll_active = false
+		title.autowrap_mode = TextServer.AUTOWRAP_OFF
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		title.text = _rainbow_title("Select Level")
+
+	var grid := panel.get_node_or_null("LevelPanelVBox/LevelGridRow/LevelGridMargin/LevelGrid") as GridContainer
+	if grid != null:
+		_populate_level_grid(grid)
+
+	var home: Button = panel.get_node_or_null("LevelHomeBar/LevelHomeWrap/LevelHomeButton") as Button
+	if home != null:
+		if not home.pressed.is_connected(_on_home_pressed):
+			home.pressed.connect(_on_home_pressed)
+		if not home.has_theme_stylebox_override("normal"):
+			_style_start_button(home, Color8(83, 201, 255))
+
+func _populate_level_grid(grid: GridContainer) -> void:
+	if grid.get_child_count() > 0:
+		return
+	if grid.columns <= 0:
+		grid.columns = LEVEL_GRID_COLUMNS
+	for i in range(1, 11):
+		var btn := Button.new()
+		btn.name = "LevelButton%d" % i
+		btn.text = ""
+		btn.custom_minimum_size = Vector2(LEVEL_BUTTON_WIDTH, LEVEL_BUTTON_HEIGHT)
+		btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		btn.pressed.connect(_on_level_pressed.bind(i))
+		grid.add_child(btn)
+
+		var content := HBoxContainer.new()
+		content.name = "LevelContent%d" % i
+		content.set_anchors_preset(Control.PRESET_FULL_RECT)
+		content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		content.alignment = BoxContainer.ALIGNMENT_CENTER
+		content.add_theme_constant_override("separation", 8)
+		content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		btn.add_child(content)
+
+		var label := Label.new()
+		label.name = "LevelLabel%d" % i
+		label.text = "Level %d" % i
+		label.add_theme_font_size_override("font_size", 20)
+		label.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
+		content.add_child(label)
+
+		var tick := Label.new()
+		tick.name = "LevelTick%d" % i
+		tick.text = ""
+		tick.add_theme_font_size_override("font_size", 18)
+		tick.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
+		content.add_child(tick)
+
 func _show_stage_select() -> void:
 	stage_panel.visible = true
 	level_panel.visible = false
@@ -2399,8 +3682,12 @@ func _show_stage_select() -> void:
 	game_panel.visible = false
 	safe_area.visible = false
 	input_enabled = false
+	_clear_animation_layer()
+	_stop_next_level_countdown()
 	status_label.text = ""
 	_apply_menu_theme(current_stage)
+	if background_rect != null:
+		background_rect.visible = false
 
 func _show_game() -> void:
 	stage_panel.visible = false
@@ -2412,6 +3699,9 @@ func _show_game() -> void:
 	game_panel.visible = true
 	safe_area.visible = true
 	input_enabled = true
+	if background_rect != null:
+		background_rect.visible = true
+		_apply_background_cover(background_rect)
 
 func _on_stage_pressed(stage: int) -> void:
 	current_stage = stage
@@ -2433,6 +3723,12 @@ func _ensure_hbox_button(node_name: String, text_value: String) -> Button:
 	return btn
 
 func _ensure_level_panel() -> Control:
+	var existing := get_node_or_null("LevelPanel")
+	if existing != null and existing is Control:
+		var panel_existing := existing as Control
+		_wire_level_panel(panel_existing)
+		return panel_existing
+
 	var panel := Control.new()
 	panel.name = "LevelPanel"
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -2440,10 +3736,11 @@ func _ensure_level_panel() -> Control:
 	panel.visible = false
 	add_child(panel)
 
-	var backdrop := ColorRect.new()
+	var backdrop := TextureRect.new()
 	backdrop.name = "LevelBackdrop"
-	backdrop.color = Color(0.08, 0.1, 0.14, 0.9)
+	backdrop.texture = load("res://assets/bg/bg_levelselect.png") as Texture2D
 	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_apply_background_cover(backdrop)
 	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(backdrop)
 
@@ -2459,7 +3756,7 @@ func _ensure_level_panel() -> Control:
 	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_theme_constant_override("separation", 12)
+	vbox.add_theme_constant_override("separation", 18)
 	panel.add_child(vbox)
 
 	var top := HBoxContainer.new()
@@ -2514,10 +3811,10 @@ func _ensure_level_panel() -> Control:
 	grid_margin.name = "LevelGridMargin"
 	grid_margin.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	grid_margin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	grid_margin.add_theme_constant_override("margin_left", 12)
-	grid_margin.add_theme_constant_override("margin_right", 12)
-	grid_margin.add_theme_constant_override("margin_top", 20)
-	grid_margin.add_theme_constant_override("margin_bottom", 24)
+	grid_margin.add_theme_constant_override("margin_left", 16)
+	grid_margin.add_theme_constant_override("margin_right", 16)
+	grid_margin.add_theme_constant_override("margin_top", 32)
+	grid_margin.add_theme_constant_override("margin_bottom", 32)
 	grid_row.add_child(grid_margin)
 
 	var right_spacer := Control.new()
@@ -2530,45 +3827,13 @@ func _ensure_level_panel() -> Control:
 	grid.columns = LEVEL_GRID_COLUMNS
 	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var hsep := 96
-	var vsep := 64
+	var hsep := 120
+	var vsep := 80
 	grid.add_theme_constant_override("hseparation", hsep)
 	grid.add_theme_constant_override("vseparation", vsep)
 	grid_margin.add_child(grid)
 
-	for i in range(1, 11):
-		var btn := Button.new()
-		btn.name = "LevelButton%d" % i
-		btn.text = ""
-		btn.custom_minimum_size = Vector2(LEVEL_BUTTON_WIDTH, LEVEL_BUTTON_HEIGHT)
-		btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		btn.pressed.connect(_on_level_pressed.bind(i))
-		grid.add_child(btn)
-
-		var content := HBoxContainer.new()
-		content.name = "LevelContent%d" % i
-		content.set_anchors_preset(Control.PRESET_FULL_RECT)
-		content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		content.alignment = BoxContainer.ALIGNMENT_CENTER
-		content.add_theme_constant_override("separation", 8)
-		content.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		btn.add_child(content)
-
-		var label := Label.new()
-		label.name = "LevelLabel%d" % i
-		label.text = "Level %d" % i
-		label.add_theme_font_size_override("font_size", 20)
-		label.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
-		content.add_child(label)
-
-		var tick := Label.new()
-		tick.name = "LevelTick%d" % i
-		tick.text = ""
-		tick.add_theme_font_size_override("font_size", 18)
-		tick.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
-		content.add_child(tick)
+	_populate_level_grid(grid)
 	var spacer := Control.new()
 	spacer.name = "LevelSpacer"
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -2595,6 +3860,7 @@ func _ensure_level_panel() -> Control:
 	home.pressed.connect(_on_home_pressed)
 	_style_start_button(home, Color8(83, 201, 255))
 	home_wrap.add_child(home)
+	_wire_level_panel(panel)
 	return panel
 
 func _show_level_select() -> void:
@@ -2607,11 +3873,15 @@ func _show_level_select() -> void:
 	options_panel.visible = false
 	safe_area.visible = false
 	input_enabled = false
-	var title := level_panel.get_node("LevelPanelVBox/LevelTitleWrap/LevelTitle") as RichTextLabel
+	_clear_animation_layer()
+	_stop_next_level_countdown()
+	var title := level_panel.get_node_or_null("LevelPanelVBox/LevelTitleWrap/LevelTitle") as RichTextLabel
 	if title != null:
 		title.text = _rainbow_title("Stage %d" % current_stage)
 	_update_level_buttons()
 	_apply_menu_theme(current_stage)
+	if background_rect != null:
+		background_rect.visible = false
 
 func _update_level_buttons() -> void:
 	var grid := level_panel.get_node("LevelPanelVBox/LevelGridRow/LevelGridMargin/LevelGrid") as GridContainer
@@ -2619,17 +3889,21 @@ func _update_level_buttons() -> void:
 		return
 	var completed := int(stage_progress.get(str(current_stage), 0))
 	var theme_index: int = clampi(current_stage - 1, 0, THEME_ACCENTS.size() - 1)
+	var unlocked_limit: int = max(completed + 1, current_level_in_stage)
 	for i in range(1, 11):
 		var btn := grid.get_node("LevelButton%d" % i) as Button
 		if btn == null:
 			continue
+		if not btn.has_meta("level_connected"):
+			btn.pressed.connect(_on_level_pressed.bind(i))
+			btn.set_meta("level_connected", true)
 		var label := btn.get_node_or_null("LevelContent%d/LevelLabel%d" % [i, i]) as Label
 		if label != null:
 			label.text = "Level %d" % i
 		var tick := btn.get_node_or_null("LevelContent%d/LevelTick%d" % [i, i]) as Label
 		if tick != null:
 			tick.text = "✓" if i <= completed else ""
-		var locked: bool = i > min(completed + 1, 10)
+		var locked: bool = i > min(unlocked_limit, 10)
 		btn.disabled = locked
 		_style_level_button(btn, theme_index, locked)
 
@@ -2637,7 +3911,41 @@ func _on_level_pressed(level_in_stage: int) -> void:
 	current_level_in_stage = level_in_stage
 	new_level()
 
+func _wire_stage_complete_popup(panel: Control) -> void:
+	panel.z_index = 2000
+	panel.z_as_relative = false
+	panel.set_as_top_level(true)
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	var dim := panel.get_node_or_null("StageCompleteDim") as ColorRect
+	if dim == null:
+		dim = ColorRect.new()
+		dim.name = "StageCompleteDim"
+		dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+		dim.color = Color(0, 0, 0, 0.35)
+		dim.mouse_filter = Control.MOUSE_FILTER_STOP
+		panel.add_child(dim)
+		panel.move_child(dim, 0)
+	var back: Button = panel.get_node_or_null("StageCompleteCenter/StageCompletePanel/StageCompleteVBox/StageCompleteButtons/StageCompleteButton") as Button
+	if back != null:
+		if not back.pressed.is_connected(_on_stage_complete_pressed):
+			back.pressed.connect(_on_stage_complete_pressed)
+		if not back.has_theme_stylebox_override("normal"):
+			_style_start_button(back, Color8(83, 201, 255))
+
+	var next: Button = panel.get_node_or_null("StageCompleteCenter/StageCompletePanel/StageCompleteVBox/StageCompleteButtons/StageCompleteNextButton") as Button
+	if next != null:
+		if not next.pressed.is_connected(_on_stage_complete_next_pressed):
+			next.pressed.connect(_on_stage_complete_next_pressed)
+		if not next.has_theme_stylebox_override("normal"):
+			_style_start_button(next, Color8(109, 255, 160))
+
 func _ensure_stage_complete_popup() -> Control:
+	var existing := get_node_or_null("StageCompletePopup")
+	if existing != null and existing is Control:
+		var panel_existing := existing as Control
+		_wire_stage_complete_popup(panel_existing)
+		return panel_existing
+
 	var panel := Control.new()
 	panel.name = "StageCompletePopup"
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -2693,6 +4001,7 @@ func _ensure_stage_complete_popup() -> Control:
 	next.pressed.connect(_on_stage_complete_next_pressed)
 	_style_start_button(next, Color8(109, 255, 160))
 	buttons.add_child(next)
+	_wire_stage_complete_popup(panel)
 	return panel
 
 func _show_stage_complete() -> void:
@@ -2722,6 +4031,7 @@ func _on_stage_complete_next_pressed() -> void:
 		new_level()
 
 func _show_start_screen() -> void:
+	editor_preview_active = false
 	stage_panel.visible = false
 	level_panel.visible = false
 	stage_complete_popup.visible = false
@@ -2734,10 +4044,54 @@ func _show_start_screen() -> void:
 	start_panel.visible = true
 	safe_area.visible = false
 	input_enabled = false
+	_clear_animation_layer()
+	_stop_next_level_countdown()
 	status_label.text = ""
+	call_deferred("_start_home_fx")
+	if background_rect != null:
+		background_rect.visible = false
 
 func _on_home_pressed() -> void:
+	editor_preview_active = false
+	if editor_preview_path != "":
+		get_tree().set_meta("editor_return_path", editor_preview_path)
+		get_tree().change_scene_to_file("res://LevelEditor.tscn")
+		return
 	_show_start_screen()
+
+func _on_back_to_editor_pressed() -> void:
+	if editor_preview_path != "":
+		get_tree().set_meta("editor_return_path", editor_preview_path)
+	get_tree().change_scene_to_file("res://LevelEditor.tscn")
+
+func _open_level_editor() -> void:
+	get_tree().change_scene_to_file("res://LevelEditor.tscn")
+
+func _check_editor_preview() -> void:
+	if not get_tree().has_meta("editor_preview_path"):
+		return
+	var path := str(get_tree().get_meta("editor_preview_path"))
+	get_tree().remove_meta("editor_preview_path")
+	if path.strip_edges() == "":
+		return
+	editor_preview_active = true
+	editor_preview_path = path
+
+func _start_home_fx() -> void:
+	_ensure_start_twinkles()
+	_play_start_sparkles()
+
+func _start_current_level() -> void:
+	var target := _next_unlocked_level()
+	current_stage = target.x
+	current_level_in_stage = target.y
+	new_level()
+
+func _next_unlocked_level() -> Vector2i:
+	var stage := clampi(unlocked_stage, 1, 10)
+	var completed := int(stage_progress.get(str(stage), 0))
+	var level := clampi(completed + 1, 1, 10)
+	return Vector2i(stage, level)
 
 func _on_solve_pressed() -> void:
 	if is_animating:
@@ -2847,6 +4201,14 @@ func _heuristic(state: Array) -> int:
 		total += best
 	return total
 
+func _normalize_difficulty_label(label: String) -> String:
+	var trimmed := label.strip_edges().to_lower()
+	if trimmed == "very easy":
+		return "easy"
+	if trimmed == "very hard":
+		return "hard"
+	return trimmed
+
 func _reconstruct_path(start_key: String, end_key: String, parent: Dictionary, move_from: Dictionary) -> Array:
 	var path: Array = []
 	var key := end_key
@@ -2859,6 +4221,7 @@ func _reconstruct_path(start_key: String, end_key: String, parent: Dictionary, m
 	return path
 
 func _on_new_level_pressed() -> void:
+	_stop_next_level_countdown()
 	if not _can_advance_level():
 		status_label.text = "Unlock the next level first"
 		return

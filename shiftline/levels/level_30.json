@@ -9,58 +9,63 @@
   ],
   "walls": [
     [
-      1,
-      1
-    ],
-    [
-      1,
-      4
+      0,
+      5
     ],
     [
       2,
-      2
-    ],
-    [
-      6,
       3
     ],
     [
-      7,
-      5
+      3,
+      4
+    ],
+    [
+      5,
+      1
+    ],
+    [
+      6,
+      0
+    ],
+    [
+      6,
+      6
     ]
   ],
   "blocks": [
     {
       "pos": [
-        1,
-        2
+        5,
+        0
       ],
-      "color": 1
+      "color": 0
     },
     {
       "pos": [
-        1,
-        6
+        7,
+        2
       ],
-      "color": 2
+      "color": 3
     }
   ],
   "holes": [
     {
       "pos": [
-        6,
-        0
+        5,
+        2
       ],
-      "color": 1
+      "color": 3
     },
     {
       "pos": [
         7,
-        4
+        3
       ],
-      "color": 2
+      "color": 0
     }
   ],
-  "difficulty": 9,
-  "difficulty_label": "very hard"
+  "bouncers": [],
+  "difficulty": 4,
+  "difficulty_label": "hard"
 }

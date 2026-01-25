@@ -9,11 +9,11 @@
   ],
   "walls": [
     [
-      5,
+      0,
       5
     ],
     [
-      6,
+      3,
       2
     ]
   ],
@@ -21,21 +21,14 @@
     {
       "pos": [
         0,
-        0
-      ],
-      "color": 2
-    },
-    {
-      "pos": [
-        0,
-        4
+        7
       ],
       "color": 1
     },
     {
       "pos": [
         7,
-        7
+        6
       ],
       "color": 0
     }
@@ -51,18 +44,12 @@
     {
       "pos": [
         7,
-        4
+        6
       ],
       "color": 1
-    },
-    {
-      "pos": [
-        7,
-        0
-      ],
-      "color": 2
     }
   ],
-  "difficulty": 1,
+  "bouncers": [],
+  "difficulty": 3,
   "difficulty_label": "challenging"
 }

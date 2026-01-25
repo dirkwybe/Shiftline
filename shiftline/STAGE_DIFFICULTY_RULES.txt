@@ -1,0 +1,32 @@
+Stage difficulty rules
+
+Structure
+- 10 stages total
+- 10 levels per stage
+- Within a stage: difficulty increases from level 1 to level 10
+
+Stage 1 (intro)
+- Levels 1-4: easy
+- Levels 5-8: fun
+- Levels 9-10: challenging
+
+Stages 2-10
+- Levels 1-5: challenging
+- Levels 6-9: hard
+- Level 10: hard+
+
+Global rule
+- Easy levels appear only in Stage 1.
+
+Hard+ definition
+- Use "hard" label, but ensure highest par_per_block and strict ordering
+- Multiple interdependencies and at least one multi-swipe block
+
+Placement rules
+- Do not place a level where any block starts already solved.
+- Prefer variety in mechanics per stage (walls, bouncers, holes placement).
+- Par should generally rise within the stage.
+
+Notes
+- These are ordering rules, not automatic labels.
+- Manual overrides are allowed but should be noted in JSON.

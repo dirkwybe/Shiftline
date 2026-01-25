@@ -1,0 +1,49 @@
+Difficulty rubric (manual classification)
+
+Definitions
+- blocks: number of colored blocks in the level
+- par_moves: minimum moves required to solve (solver par)
+- par_per_block: par_moves / blocks
+- ordering:
+  - none: blocks can be solved in any order
+  - specific: at least one block must be solved before another (soft dependency)
+  - strict: multiple dependencies; order matters and mis-ordering blocks progress
+- multi_swipe: at least one block needs 2+ swipes to solve
+
+Classification
+Easy
+- Blocks: 1-4
+- multi_swipe: no (single swipe per block)
+- ordering: any (if all blocks solve in 1 swipe, it is easy)
+- par_per_block: <= 2.0
+
+Fun
+- Blocks: 1-3
+- multi_swipe: yes (at least one block needs 2+ swipes)
+- ordering: none
+- par_per_block: <= 2.5
+
+Challenging
+- Blocks: 1-4
+- multi_swipe: yes (at least one block needs 2+ swipes)
+- ordering: specific or strict
+- par_per_block: <= 2.5
+
+Hard
+- Blocks: 1-4
+- multi_swipe: yes (at least one block needs 2+ swipes)
+- ordering: strict
+- par_per_block: > 2.5
+
+Sublevel within a tier
+- Primary: par_per_block (higher = harder)
+- Secondary: total par_moves
+- Tertiary: dependency count (more dependencies = harder)
+
+Tie-breakers
+- If par_per_block is borderline, use ordering (strict > specific > none).
+- If still unclear, use blocks count (more blocks = harder).
+
+Notes
+- Use the dev difficulty dropdown to set the label.
+- If you override a level manually, set the manual flag in JSON.

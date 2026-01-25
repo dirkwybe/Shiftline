@@ -1,0 +1,182 @@
+[gd_scene load_steps=4 format=3 uid="uid://fllibfod650"]
+
+[ext_resource type="Script" path="res://LevelEditor.gd" id="1_1w0xg"]
+[ext_resource type="Texture2D" path="res://assets/bg/bg_options.png" id="2_rj2pe"]
+[ext_resource type="Texture2D" path="res://assets/tiles/tile_base.svg" id="3_0ac21"]
+[ext_resource type="Texture2D" path="res://assets/tiles/wall_block3.svg" id="4_jxk0r"]
+
+[node name="LevelEditor" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_1w0xg")
+tile_texture = ExtResource("3_0ac21")
+wall_texture = ExtResource("4_jxk0r")
+background_texture = ExtResource("2_rj2pe")
+
+[node name="Background" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("2_rj2pe")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="Layout" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 12
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Title" type="RichTextLabel" parent="Layout"]
+layout_mode = 2
+bbcode_enabled = true
+text = "[center][b]Level Editor[/b][/center]"
+fit_content = true
+scroll_active = false
+autowrap_mode = 0
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/normal_font_size = 40
+
+[node name="ControlsBar" type="VBoxContainer" parent="Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="ControlsRow1" type="HBoxContainer" parent="Layout/ControlsBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="ToolLabel" type="Label" parent="Layout/ControlsBar/ControlsRow1"]
+layout_mode = 2
+text = "Tool"
+
+[node name="ToolOption" type="OptionButton" parent="Layout/ControlsBar/ControlsRow1"]
+layout_mode = 2
+custom_minimum_size = Vector2(120, 0)
+
+[node name="ColorLabel" type="Label" parent="Layout/ControlsBar/ControlsRow1"]
+layout_mode = 2
+text = "Color"
+
+[node name="ColorOption" type="OptionButton" parent="Layout/ControlsBar/ControlsRow1"]
+layout_mode = 2
+custom_minimum_size = Vector2(110, 0)
+
+[node name="BouncerLabel" type="Label" parent="Layout/ControlsBar/ControlsRow1"]
+layout_mode = 2
+text = "Bouncer"
+
+[node name="BouncerOption" type="OptionButton" parent="Layout/ControlsBar/ControlsRow1"]
+layout_mode = 2
+custom_minimum_size = Vector2(110, 0)
+
+[node name="ControlsRow2" type="HBoxContainer" parent="Layout/ControlsBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="WidthLabel" type="Label" parent="Layout/ControlsBar/ControlsRow2"]
+layout_mode = 2
+text = "W"
+
+[node name="WidthSpin" type="SpinBox" parent="Layout/ControlsBar/ControlsRow2"]
+layout_mode = 2
+custom_minimum_size = Vector2(70, 0)
+
+[node name="HeightLabel" type="Label" parent="Layout/ControlsBar/ControlsRow2"]
+layout_mode = 2
+text = "H"
+
+[node name="HeightSpin" type="SpinBox" parent="Layout/ControlsBar/ControlsRow2"]
+layout_mode = 2
+custom_minimum_size = Vector2(70, 0)
+
+[node name="ResizeButton" type="Button" parent="Layout/ControlsBar/ControlsRow2"]
+layout_mode = 2
+text = "Resize"
+
+[node name="PathBar" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="PathLine" type="LineEdit" parent="Layout/PathBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "res://levels/level_custom.json"
+
+[node name="BrowseLoad" type="Button" parent="Layout/PathBar"]
+layout_mode = 2
+text = "Browse Load"
+
+[node name="BrowseSave" type="Button" parent="Layout/PathBar"]
+layout_mode = 2
+text = "Browse Save"
+
+[node name="GridCenter" type="CenterContainer" parent="Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Grid" type="GridContainer" parent="Layout/GridCenter"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+
+[node name="StatusLabel" type="Label" parent="Layout"]
+layout_mode = 2
+text = ""
+horizontal_alignment = 1
+
+[node name="ButtonBar" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+alignment = 1
+
+[node name="NewButton" type="Button" parent="Layout/ButtonBar"]
+layout_mode = 2
+text = "New"
+
+[node name="LoadButton" type="Button" parent="Layout/ButtonBar"]
+layout_mode = 2
+text = "Load"
+
+[node name="SaveButton" type="Button" parent="Layout/ButtonBar"]
+layout_mode = 2
+text = "Save"
+
+[node name="TestButton" type="Button" parent="Layout/ButtonBar"]
+layout_mode = 2
+text = "Test"
+
+[node name="HomeButton" type="Button" parent="Layout/ButtonBar"]
+layout_mode = 2
+text = "Home"
+
+[node name="LoadDialog" type="FileDialog" parent="."]
+access = 2
+file_mode = 0
+filters = PackedStringArray("*.json")
+
+[node name="SaveDialog" type="FileDialog" parent="."]
+access = 2
+file_mode = 4
+filters = PackedStringArray("*.json")

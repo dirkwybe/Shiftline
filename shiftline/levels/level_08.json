@@ -7,17 +7,12 @@
     "#50BE78",
     "#E6C846"
   ],
-  "walls": [
-    [
-      3,
-      3
-    ]
-  ],
+  "walls": [],
   "blocks": [
     {
       "pos": [
-        7,
-        0
+        6,
+        5
       ],
       "color": 0
     }
@@ -25,12 +20,13 @@
   "holes": [
     {
       "pos": [
-        0,
+        7,
         7
       ],
       "color": 0
     }
   ],
-  "difficulty": 8,
-  "difficulty_label": "easy"
+  "bouncers": [],
+  "difficulty": 2,
+  "difficulty_label": "fun"
 }

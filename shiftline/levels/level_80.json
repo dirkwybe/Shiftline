@@ -10,37 +10,44 @@
   "walls": [
     [
       0,
-      3
+      4
     ],
     [
-      3,
-      2
+      1,
+      5
     ],
     [
-      3,
-      3
-    ],
-    [
-      4,
+      5,
       1
     ],
     [
+      5,
+      3
+    ],
+    [
       6,
-      6
+      0
     ]
   ],
   "blocks": [
     {
       "pos": [
-        2,
-        0
+        0,
+        5
       ],
       "color": 1
     },
     {
       "pos": [
         6,
-        3
+        1
+      ],
+      "color": 0
+    },
+    {
+      "pos": [
+        7,
+        7
       ],
       "color": 2
     }
@@ -49,18 +56,26 @@
     {
       "pos": [
         0,
-        4
+        6
       ],
       "color": 1
     },
     {
       "pos": [
         6,
-        5
+        3
+      ],
+      "color": 0
+    },
+    {
+      "pos": [
+        7,
+        4
       ],
       "color": 2
     }
   ],
-  "difficulty": 8,
-  "difficulty_label": "very hard"
+  "bouncers": [],
+  "difficulty": 4,
+  "difficulty_label": "hard"
 }

@@ -11,21 +11,22 @@
   "blocks": [
     {
       "pos": [
-        6,
-        0
+        2,
+        2
       ],
-      "color": 1
+      "color": 2
     }
   ],
   "holes": [
     {
       "pos": [
-        6,
-        7
+        0,
+        2
       ],
-      "color": 1
+      "color": 2
     }
   ],
-  "difficulty": 3,
-  "difficulty_label": "very easy"
+  "bouncers": [],
+  "difficulty": 1,
+  "difficulty_label": "easy"
 }

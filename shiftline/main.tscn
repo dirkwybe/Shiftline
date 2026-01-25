@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3 uid="uid://c5ufopo7w0an7"]
+[gd_scene load_steps=15 format=3 uid="uid://c5ufopo7w0an7"]
 
 [ext_resource type="Script" uid="uid://derteuj2kyg75" path="res://Game.gd" id="1_ig7tw"]
 [ext_resource type="AudioStream" uid="uid://dnsv0qj04cjq" path="res://assets/sounds/slide.mp3" id="2_0xm2m"]
@@ -6,7 +6,14 @@
 [ext_resource type="AudioStream" uid="uid://tsc57wlu34lo" path="res://assets/sounds/win.mp3" id="4_lquwl"]
 [ext_resource type="AudioStream" uid="uid://c1fg5aictfcep" path="res://assets/sounds/nosolution.mp3" id="5_lquwl"]
 [ext_resource type="Texture2D" uid="uid://rqgpjr56kn2k" path="res://assets/tiles/tile_base.svg" id="6_272bh"]
-[ext_resource type="Texture2D" uid="uid://hbdbyqkmpug6" path="res://assets/tiles/wall_block2.svg" id="7_272bh"]
+[ext_resource type="Texture2D" uid="uid://bcuc1y3akp62m" path="res://assets/tiles/wall_neon.png" id="7_272bh"]
+[ext_resource type="Texture2D" uid="uid://cqn83cgei7jk" path="res://assets/bg/bg_main.png" id="8_5vw27"]
+[ext_resource type="Texture2D" uid="uid://bnqsfvyru4g1a" path="res://assets/bg/bg_stageselect.png" id="9_3f02w"]
+[ext_resource type="Texture2D" uid="uid://bwl2soa1vwx2k" path="res://assets/bg/bg_levelselect.png" id="10_k6or7"]
+[ext_resource type="Texture2D" uid="uid://ctw0xg7ovsxo8" path="res://assets/bg/bg_options.png" id="11_qf3s8"]
+[ext_resource type="Texture2D" uid="uid://b7v2te6nexjsh" path="res://assets/bg/bg_about.png" id="12_9p2m7"]
+[ext_resource type="Texture2D" uid="uid://cq81buk1djufe" path="res://assets/bg/bg_howtoplay.png" id="13_8y1pq"]
+[ext_resource type="Texture2D" uid="uid://bfrwqsfu7ig4h" path="res://assets/bg/bg_gameplay.png" id="14_p9h4v"]
 
 [node name="Main" type="Control"]
 layout_mode = 3
@@ -27,10 +34,9 @@ matching colors and finding order.
 Made for iOS.
 
 If you have any questions or feedback, please send an email to Dirk: dirkwybe@gmail.com"
-wall_tint = Color(0.6943767, 0.6948095, 0.74558616, 1)
-wall_tint_contrast = Color(0.25148505, 0.25146875, 0.292691, 1)
 
 [node name="Background" type="TextureRect" parent="."]
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -38,6 +44,9 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
+texture = ExtResource("14_p9h4v")
+expand_mode = 1
+stretch_mode = 6
 
 [node name="StartPanel" type="Control" parent="."]
 visible = false
@@ -56,7 +65,9 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-stretch_mode = 1
+texture = ExtResource("8_5vw27")
+expand_mode = 1
+stretch_mode = 6
 
 [node name="StartLayout" type="VBoxContainer" parent="StartPanel"]
 layout_mode = 1
@@ -65,49 +76,49 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 12
-
-[node name="StartTitle" type="RichTextLabel" parent="StartPanel/StartLayout"]
-custom_minimum_size = Vector2(0, 180)
-layout_mode = 2
-size_flags_vertical = 3
-theme_override_font_sizes/normal_font_size = 64
-bbcode_enabled = true
-text = "[center][color=#6ED3FF]S[/color][color=#6BFFA0]h[/color][color=#F9D56E]i[/color][color=#FF7A7A]f[/color][color=#B76DFF]t[/color][color=#6ED3FF]l[/color][color=#6BFFA0]i[/color][color=#F9D56E]n[/color][color=#FF7A7A]e[/color][/center]"
-fit_content = true
-scroll_active = false
+theme_override_constants/separation = 18
 
 [node name="StartSpacer" type="Control" parent="StartPanel/StartLayout"]
 layout_mode = 2
 size_flags_vertical = 3
 
 [node name="StartBox" type="PanelContainer" parent="StartPanel/StartLayout"]
-custom_minimum_size = Vector2(300, 260)
+custom_minimum_size = Vector2(360, 380)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
 
 [node name="StartVBox" type="VBoxContainer" parent="StartPanel/StartLayout/StartBox"]
 layout_mode = 2
-theme_override_constants/separation = 10
+theme_override_constants/separation = 14
 
-[node name="StartPlayButton" type="Button" parent="StartPanel/StartLayout/StartBox/StartVBox"]
-custom_minimum_size = Vector2(0, 52)
+[node name="StartCurrentButton" type="Button" parent="StartPanel/StartLayout/StartBox/StartVBox"]
+custom_minimum_size = Vector2(0, 60)
 layout_mode = 2
 text = "Play"
 
+[node name="StartPlayButton" type="Button" parent="StartPanel/StartLayout/StartBox/StartVBox"]
+custom_minimum_size = Vector2(0, 60)
+layout_mode = 2
+text = "Select Stage"
+
+[node name="StartEditorButton" type="Button" parent="StartPanel/StartLayout/StartBox/StartVBox"]
+custom_minimum_size = Vector2(0, 54)
+layout_mode = 2
+text = "Level Editor"
+
 [node name="StartOptionsButton" type="Button" parent="StartPanel/StartLayout/StartBox/StartVBox"]
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(0, 54)
 layout_mode = 2
 text = "Options"
 
 [node name="StartAboutButton" type="Button" parent="StartPanel/StartLayout/StartBox/StartVBox"]
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(0, 54)
 layout_mode = 2
 text = "About"
 
 [node name="StartHowToButton" type="Button" parent="StartPanel/StartLayout/StartBox/StartVBox"]
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(0, 54)
 layout_mode = 2
 text = "How To Play"
 
@@ -115,7 +126,642 @@ text = "How To Play"
 layout_mode = 2
 size_flags_vertical = 3
 
+[node name="StagePanel" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="StageBackdrop" type="TextureRect" parent="StagePanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("9_3f02w")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="StageVignette" type="ColorRect" parent="StagePanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 0.18)
+
+[node name="StagePanelVBox" type="VBoxContainer" parent="StagePanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 18
+
+[node name="StageTopBar" type="HBoxContainer" parent="StagePanel/StagePanelVBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="StageTopSpacer" type="Control" parent="StagePanel/StagePanelVBox/StageTopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="StageGridSpacer" type="Control" parent="StagePanel/StagePanelVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="StageGridMargin" type="MarginContainer" parent="StagePanel/StagePanelVBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 32
+
+[node name="StageGrid" type="GridContainer" parent="StagePanel/StagePanelVBox/StageGridMargin"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+columns = 2
+
+[node name="StageSpacer" type="Control" parent="StagePanel/StagePanelVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="StageHomeBar" type="Control" parent="StagePanel"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = -72.0
+offset_right = -12.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="StageHomeWrap" type="CenterContainer" parent="StagePanel/StageHomeBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="StageHomeButton" type="Button" parent="StagePanel/StageHomeBar/StageHomeWrap"]
+custom_minimum_size = Vector2(160, 44)
+layout_mode = 2
+text = "Home"
+
+[node name="LevelPanel" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="LevelBackdrop" type="TextureRect" parent="LevelPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("10_k6or7")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="LevelVignette" type="ColorRect" parent="LevelPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 0.18)
+
+[node name="LevelPanelVBox" type="VBoxContainer" parent="LevelPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 18
+
+[node name="LevelTopBar" type="HBoxContainer" parent="LevelPanel/LevelPanelVBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="LevelTopSpacer" type="Control" parent="LevelPanel/LevelPanelVBox/LevelTopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="LevelGridSpacer" type="Control" parent="LevelPanel/LevelPanelVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="LevelGridRow" type="HBoxContainer" parent="LevelPanel/LevelPanelVBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 0
+
+[node name="LevelGridLeftSpacer" type="Control" parent="LevelPanel/LevelPanelVBox/LevelGridRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="LevelGridMargin" type="MarginContainer" parent="LevelPanel/LevelPanelVBox/LevelGridRow"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 32
+
+[node name="LevelGrid" type="GridContainer" parent="LevelPanel/LevelPanelVBox/LevelGridRow/LevelGridMargin"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+columns = 2
+
+[node name="LevelGridRightSpacer" type="Control" parent="LevelPanel/LevelPanelVBox/LevelGridRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="LevelSpacer" type="Control" parent="LevelPanel/LevelPanelVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="LevelHomeBar" type="Control" parent="LevelPanel"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = -72.0
+offset_right = -12.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="LevelHomeWrap" type="CenterContainer" parent="LevelPanel/LevelHomeBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="LevelHomeButton" type="Button" parent="LevelPanel/LevelHomeBar/LevelHomeWrap"]
+custom_minimum_size = Vector2(160, 44)
+layout_mode = 2
+text = "Home"
+
+[node name="OptionsPanel" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="OptionsBackdrop" type="TextureRect" parent="OptionsPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("11_qf3s8")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="OptionsLayout" type="VBoxContainer" parent="OptionsPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 8
+
+[node name="OptionsTopBar" type="HBoxContainer" parent="OptionsPanel/OptionsLayout"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="OptionsTopSpacer" type="Control" parent="OptionsPanel/OptionsLayout/OptionsTopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="OptionsTitleWrap" type="CenterContainer" parent="OptionsPanel/OptionsLayout"]
+custom_minimum_size = Vector2(0, 120)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+
+[node name="OptionsTitle" type="RichTextLabel" parent="OptionsPanel/OptionsLayout/OptionsTitleWrap"]
+layout_mode = 2
+theme_override_font_sizes/normal_font_size = 44
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+autowrap_mode = 0
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="OptionsCenter" type="CenterContainer" parent="OptionsPanel/OptionsLayout"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="OptionsBox" type="PanelContainer" parent="OptionsPanel/OptionsLayout/OptionsCenter"]
+custom_minimum_size = Vector2(300, 200)
+layout_mode = 2
+
+[node name="OptionsVBox" type="VBoxContainer" parent="OptionsPanel/OptionsLayout/OptionsCenter/OptionsBox"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="HighContrastCheck" type="CheckButton" parent="OptionsPanel/OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "High Contrast"
+
+[node name="LargeTilesCheck" type="CheckButton" parent="OptionsPanel/OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Large Tiles"
+
+[node name="SoundCheck" type="CheckButton" parent="OptionsPanel/OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Sound"
+
+[node name="ResetProgressButton" type="Button" parent="OptionsPanel/OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Reset Progress"
+
+[node name="OptionsSpacer" type="Control" parent="OptionsPanel/OptionsLayout"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="OptionsHomeBar" type="Control" parent="OptionsPanel"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = -72.0
+offset_right = -12.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="OptionsHomeWrap" type="CenterContainer" parent="OptionsPanel/OptionsHomeBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="OptionsHomeButton" type="Button" parent="OptionsPanel/OptionsHomeBar/OptionsHomeWrap"]
+custom_minimum_size = Vector2(160, 44)
+layout_mode = 2
+text = "Home"
+
+[node name="AboutPanel" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="AboutBackdrop" type="TextureRect" parent="AboutPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("12_9p2m7")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="AboutLayout" type="VBoxContainer" parent="AboutPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 8
+
+[node name="AboutTopBar" type="HBoxContainer" parent="AboutPanel/AboutLayout"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="AboutTopSpacer" type="Control" parent="AboutPanel/AboutLayout/AboutTopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="AboutTitleWrap" type="CenterContainer" parent="AboutPanel/AboutLayout"]
+custom_minimum_size = Vector2(0, 120)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+
+[node name="AboutTitle" type="RichTextLabel" parent="AboutPanel/AboutLayout/AboutTitleWrap"]
+layout_mode = 2
+theme_override_font_sizes/normal_font_size = 44
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+autowrap_mode = 0
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="AboutCenter" type="CenterContainer" parent="AboutPanel/AboutLayout"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="AboutBox" type="PanelContainer" parent="AboutPanel/AboutLayout/AboutCenter"]
+custom_minimum_size = Vector2(360, 320)
+layout_mode = 2
+
+[node name="AboutVBox" type="VBoxContainer" parent="AboutPanel/AboutLayout/AboutCenter/AboutBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="AboutBody" type="RichTextLabel" parent="AboutPanel/AboutLayout/AboutCenter/AboutBox/AboutVBox"]
+layout_mode = 2
+theme_override_constants/line_separation = 8
+theme_override_font_sizes/normal_font_size = 24
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+horizontal_alignment = 1
+
+[node name="AboutSpacer" type="Control" parent="AboutPanel/AboutLayout"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="AboutHomeBar" type="Control" parent="AboutPanel"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = -72.0
+offset_right = -12.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="AboutHomeWrap" type="CenterContainer" parent="AboutPanel/AboutHomeBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="AboutHomeButton" type="Button" parent="AboutPanel/AboutHomeBar/AboutHomeWrap"]
+custom_minimum_size = Vector2(160, 44)
+layout_mode = 2
+text = "Home"
+
+[node name="HowToPanel" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="HowToBackdrop" type="TextureRect" parent="HowToPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("13_8y1pq")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="HowToLayout" type="VBoxContainer" parent="HowToPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 8
+
+[node name="HowToTopBar" type="HBoxContainer" parent="HowToPanel/HowToLayout"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="HowToTopSpacer" type="Control" parent="HowToPanel/HowToLayout/HowToTopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HowToTitleWrap" type="CenterContainer" parent="HowToPanel/HowToLayout"]
+custom_minimum_size = Vector2(0, 120)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+
+[node name="HowToTitle" type="RichTextLabel" parent="HowToPanel/HowToLayout/HowToTitleWrap"]
+layout_mode = 2
+theme_override_font_sizes/normal_font_size = 44
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+autowrap_mode = 0
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HowToCenter" type="CenterContainer" parent="HowToPanel/HowToLayout"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="HowToBox" type="PanelContainer" parent="HowToPanel/HowToLayout/HowToCenter"]
+custom_minimum_size = Vector2(360, 320)
+layout_mode = 2
+
+[node name="HowToVBox" type="VBoxContainer" parent="HowToPanel/HowToLayout/HowToCenter/HowToBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="HowToBody" type="RichTextLabel" parent="HowToPanel/HowToLayout/HowToCenter/HowToBox/HowToVBox"]
+layout_mode = 2
+theme_override_constants/line_separation = 8
+theme_override_font_sizes/normal_font_size = 24
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+horizontal_alignment = 1
+
+[node name="HowToSpacer" type="Control" parent="HowToPanel/HowToLayout"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="HowToHomeBar" type="Control" parent="HowToPanel"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = -72.0
+offset_right = -12.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="HowToHomeWrap" type="CenterContainer" parent="HowToPanel/HowToHomeBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="HowToHomeButton" type="Button" parent="HowToPanel/HowToHomeBar/HowToHomeWrap"]
+custom_minimum_size = Vector2(160, 44)
+layout_mode = 2
+text = "Home"
+
+[node name="StageCompletePopup" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="StageCompleteCenter" type="CenterContainer" parent="StageCompletePopup"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="StageCompletePanel" type="PanelContainer" parent="StageCompletePopup/StageCompleteCenter"]
+custom_minimum_size = Vector2(320, 170)
+layout_mode = 2
+
+[node name="StageCompleteVBox" type="VBoxContainer" parent="StageCompletePopup/StageCompleteCenter/StageCompletePanel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="StageCompleteLabel" type="Label" parent="StageCompletePopup/StageCompleteCenter/StageCompletePanel/StageCompleteVBox"]
+layout_mode = 2
+text = "Stage Complete!"
+horizontal_alignment = 1
+
+[node name="StageCompleteButtons" type="HBoxContainer" parent="StageCompletePopup/StageCompleteCenter/StageCompletePanel/StageCompleteVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="StageCompleteButton" type="Button" parent="StageCompletePopup/StageCompleteCenter/StageCompletePanel/StageCompleteVBox/StageCompleteButtons"]
+layout_mode = 2
+text = "Back to Stages"
+
+[node name="StageCompleteNextButton" type="Button" parent="StageCompletePopup/StageCompleteCenter/StageCompletePanel/StageCompleteVBox/StageCompleteButtons"]
+layout_mode = 2
+text = "Next Stage"
+
+[node name="ResetConfirmPopup" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ResetConfirmDim" type="ColorRect" parent="ResetConfirmPopup"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 0.5)
+
+[node name="ResetConfirmCenter" type="CenterContainer" parent="ResetConfirmPopup"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ResetConfirmCard" type="PanelContainer" parent="ResetConfirmPopup/ResetConfirmCenter"]
+custom_minimum_size = Vector2(320, 170)
+layout_mode = 2
+
+[node name="ResetConfirmVBox" type="VBoxContainer" parent="ResetConfirmPopup/ResetConfirmCenter/ResetConfirmCard"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="ResetConfirmLabel" type="Label" parent="ResetConfirmPopup/ResetConfirmCenter/ResetConfirmCard/ResetConfirmVBox"]
+layout_mode = 2
+text = "Reset progress?"
+horizontal_alignment = 1
+
+[node name="ResetConfirmButtons" type="HBoxContainer" parent="ResetConfirmPopup/ResetConfirmCenter/ResetConfirmCard/ResetConfirmVBox"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="ResetConfirmYes" type="Button" parent="ResetConfirmPopup/ResetConfirmCenter/ResetConfirmCard/ResetConfirmVBox/ResetConfirmButtons"]
+layout_mode = 2
+text = "Yes"
+
+[node name="ResetConfirmNo" type="Button" parent="ResetConfirmPopup/ResetConfirmCenter/ResetConfirmCard/ResetConfirmVBox/ResetConfirmButtons"]
+layout_mode = 2
+text = "No"
+
 [node name="SafeArea" type="MarginContainer" parent="."]
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -125,30 +771,40 @@ grow_vertical = 2
 theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 24
 theme_override_constants/margin_right = 16
-theme_override_constants/margin_bottom = 16
+theme_override_constants/margin_bottom = 36
 
 [node name="VBoxContainer" type="VBoxContainer" parent="SafeArea"]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="TopBar" type="VBoxContainer" parent="SafeArea/VBoxContainer"]
+[node name="TopBarCard" type="PanelContainer" parent="SafeArea/VBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+custom_minimum_size = Vector2(0, 96)
+
+[node name="TopBar" type="VBoxContainer" parent="SafeArea/VBoxContainer/TopBarCard"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 0
 theme_override_constants/separation = 4
 
-[node name="HeaderLabel" type="RichTextLabel" parent="SafeArea/VBoxContainer/TopBar"]
+[node name="GridTopSpacer" type="Control" parent="SafeArea/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="HeaderLabel" type="RichTextLabel" parent="SafeArea/VBoxContainer/TopBarCard/TopBar"]
 layout_mode = 2
 size_flags_horizontal = 3
 bbcode_enabled = true
+text = "Stage 1-1"
 fit_content = true
 scroll_active = false
 autowrap_mode = 0
 horizontal_alignment = 1
 vertical_alignment = 1
-text = "Stage 1-1"
 
-[node name="SubHeaderLabel" type="Label" parent="SafeArea/VBoxContainer/TopBar"]
+[node name="SubHeaderLabel" type="Label" parent="SafeArea/VBoxContainer/TopBarCard/TopBar"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Moves: 0"
@@ -156,6 +812,10 @@ text = "Moves: 0"
 [node name="CenterContainer" type="CenterContainer" parent="SafeArea/VBoxContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
+size_flags_vertical = 4
+
+[node name="GridBottomSpacer" type="Control" parent="SafeArea/VBoxContainer"]
+layout_mode = 2
 size_flags_vertical = 3
 
 [node name="GridContainer" type="GridContainer" parent="SafeArea/VBoxContainer/CenterContainer"]
@@ -193,7 +853,7 @@ text = "Next Level"
 
 [node name="HBoxContainer" type="HBoxContainer" parent="SafeArea/VBoxContainer"]
 layout_mode = 2
-size_flags_vertical = 6
+size_flags_vertical = 4
 
 [node name="RestartButton" type="Button" parent="SafeArea/VBoxContainer/HBoxContainer"]
 layout_mode = 2
