@@ -67,6 +67,8 @@ const LEVEL_NAMES := [
 	"Last Light",
 ]
 const TILE_OFFSET_BIAS := Vector2(-2, -2)
+const HINT_STEPS_PER_FRAME := 200
+const HINT_MAX_STATES := 8000
 
 @export var sfx_move: AudioStream
 @export var sfx_lock: AudioStream
@@ -150,6 +152,10 @@ var cached_hint_key: String = ""
 var cached_hint_path: Array = []
 var cached_hint_capped := false
 var cached_hint_unsolvable := false
+var hint_job_active := false
+var hint_job_token := 0
+var hint_job_start_key: String = ""
+var hint_job: Dictionary = {}
 var about_body_label: RichTextLabel = null
 var howto_body_label: RichTextLabel = null
 var glow_textures: Dictionary = {}
@@ -445,6 +451,139 @@ func _clear_hint_cache() -> void:
 	cached_hint_capped = false
 	cached_hint_unsolvable = false
 
+func _start_hint_job(start_key: String, max_states: int) -> void:
+	_cancel_hint_job("")
+	hint_job_active = true
+	hint_job_token += 1
+	hint_job_start_key = start_key
+	if hint_button != null:
+		hint_button.disabled = true
+	status_label.text = "Searching for hint..."
+	var open: Array = []
+	var parent: Dictionary = {}
+	var move_from: Dictionary = {}
+	var g_score: Dictionary = {}
+	var visited: Dictionary = {}
+	var start := _clone_grid(grid)
+	parent[start_key] = ""
+	g_score[start_key] = 0
+	_pq_push(open, {
+		"grid": start,
+		"key": start_key,
+		"g": 0,
+		"f": _heuristic(start)
+	})
+	hint_job = {
+		"open": open,
+		"parent": parent,
+		"move_from": move_from,
+		"g_score": g_score,
+		"visited": visited,
+		"expanded": 0,
+		"max_states": max_states
+	}
+	call_deferred("_process_hint_job", hint_job_token)
+
+func _process_hint_job(token: int) -> void:
+	if not hint_job_active or token != hint_job_token:
+		return
+	if _grid_key(grid) != hint_job_start_key:
+		_cancel_hint_job("Puzzle changed")
+		return
+	var open: Array = hint_job.get("open", [])
+	var parent: Dictionary = hint_job.get("parent", {})
+	var move_from: Dictionary = hint_job.get("move_from", {})
+	var g_score: Dictionary = hint_job.get("g_score", {})
+	var visited: Dictionary = hint_job.get("visited", {})
+	var expanded: int = int(hint_job.get("expanded", 0))
+	var max_states: int = int(hint_job.get("max_states", 0))
+	var steps := 0
+	while steps < HINT_STEPS_PER_FRAME and not open.is_empty():
+		var node: Dictionary = _pq_pop(open)
+		if node.is_empty():
+			break
+		var current: Array = node.get("grid", [])
+		var current_key: String = String(node.get("key", ""))
+		if current_key == "":
+			continue
+		if visited.has(current_key):
+			continue
+		visited[current_key] = true
+		expanded += 1
+		if expanded >= max_states:
+			hint_job["expanded"] = expanded
+			_finish_hint_job([], true, hint_job_start_key)
+			return
+		for is_row in [true, false]:
+			var limit := height if is_row else width
+			for index in range(limit):
+				for dir in [-1, 1]:
+					var result := _simulate_slide(current, is_row, index, dir)
+					if not result.get("moved", false):
+						continue
+					var next_grid: Array = result["grid"]
+					var key := _grid_key(next_grid)
+					var new_g: int = int(node.get("g", 0)) + 1
+					if g_score.has(key) and new_g >= int(g_score[key]):
+						continue
+					parent[key] = current_key
+					move_from[key] = {"is_row": is_row, "index": index, "dir": dir}
+					if _grid_is_win(next_grid):
+						var path := _reconstruct_path(hint_job_start_key, key, parent, move_from)
+						_finish_hint_job(path, false, hint_job_start_key)
+						return
+					g_score[key] = new_g
+					var h: int = _heuristic(next_grid)
+					_pq_push(open, {
+						"grid": next_grid,
+						"key": key,
+						"g": new_g,
+						"f": new_g + h
+					})
+		steps += 1
+	hint_job["expanded"] = expanded
+	if open.is_empty():
+		_finish_hint_job([], false, hint_job_start_key)
+		return
+	call_deferred("_process_hint_job", token)
+
+func _finish_hint_job(path: Array, capped: bool, start_key: String) -> void:
+	hint_job_active = false
+	hint_job = {}
+	if hint_button != null:
+		hint_button.disabled = false
+	if _grid_key(grid) != start_key:
+		return
+	if path.is_empty():
+		cached_hint_key = start_key
+		cached_hint_path.clear()
+		cached_hint_capped = capped
+		cached_hint_unsolvable = not capped
+		if capped:
+			status_label.text = "Hint search limit reached. Try Restart."
+		else:
+			status_label.text = "No solution found. Press Restart."
+			_play_sfx(sfx_no_solution, sfx_no_solution_player)
+		return
+	cached_hint_key = start_key
+	cached_hint_path = path.duplicate()
+	cached_hint_capped = false
+	cached_hint_unsolvable = false
+	var move: Dictionary = path[0]
+	_show_debug_line(move["is_row"], move["index"], int(move["dir"]), 0.8)
+	status_label.text = "Hint shown"
+
+func _cancel_hint_job(message: String) -> void:
+	if not hint_job_active:
+		return
+	hint_job_active = false
+	hint_job = {}
+	hint_job_token += 1
+	if hint_button != null:
+		hint_button.disabled = false
+	if message != "":
+		status_label.text = message
+
 func _apply_theme_from_level(data: Dictionary) -> void:
 	var theme_index: int = clampi(current_stage - 1, 0, THEME_TEXTURES.size() - 1)
 	var theme_name: String = String(data.get("theme_name", ""))
@@ -505,6 +644,9 @@ func _on_hint_pressed() -> void:
 		status_label.text = "Already solved"
 		return
 	var current_key := _grid_key(grid)
+	if hint_job_active:
+		status_label.text = "Searching for hint..."
+		return
 	if current_key == cached_hint_key:
 		if not cached_hint_path.is_empty():
 			var cached_move: Dictionary = cached_hint_path[0]
@@ -518,26 +660,7 @@ func _on_hint_pressed() -> void:
 			status_label.text = "No solution found. Press Restart."
 			_play_sfx(sfx_no_solution, sfx_no_solution_player)
 			return
-	var result := _solve_level_status(12000)
-	var path: Array = result["path"]
-	if path.is_empty():
-		cached_hint_key = current_key
-		cached_hint_path.clear()
-		cached_hint_capped = bool(result.get("capped", false))
-		cached_hint_unsolvable = not cached_hint_capped
-		if cached_hint_capped:
-			status_label.text = "Hint search limit reached. Try Restart."
-		else:
-			status_label.text = "No solution found. Press Restart."
-			_play_sfx(sfx_no_solution, sfx_no_solution_player)
-		return
-	cached_hint_key = current_key
-	cached_hint_path = path.duplicate()
-	cached_hint_capped = false
-	cached_hint_unsolvable = false
-	var move: Dictionary = path[0]
-	_show_debug_line(move["is_row"], move["index"], int(move["dir"]), 0.8)
-	status_label.text = "Hint shown"
+	_start_hint_job(current_key, HINT_MAX_STATES)
 
 func _on_options_pressed() -> void:
 	start_panel.visible = false
@@ -1673,6 +1796,7 @@ func _hide_all_blocks() -> void:
 func _start_swipe(is_row: bool, index: int, dir: int) -> void:
 	if is_animating or not input_enabled:
 		return
+	_cancel_hint_job("")
 	var result: Dictionary = _compute_slide(is_row, index, dir)
 	if not result.get("moved", false):
 		return
@@ -1818,6 +1942,7 @@ func new_level() -> void:
 	if grid_container != null:
 		grid_container.visible = true
 	_clear_animation_layer()
+	_cancel_hint_job("")
 	_stop_next_level_countdown()
 	input_enabled = true
 	status_label.text = ""
@@ -1833,6 +1958,7 @@ func restart_level() -> void:
 	if grid_container != null:
 		grid_container.visible = true
 	_clear_animation_layer()
+	_cancel_hint_job("")
 	_stop_next_level_countdown()
 	input_enabled = true
 	status_label.text = ""
@@ -2395,6 +2521,44 @@ func _grid_bounds_rect_snapped() -> Rect2:
 	rect.position = pos
 	rect.size = Vector2(maxf(0.0, end.x - pos.x), maxf(0.0, end.y - pos.y))
 	return rect
+
+func _pq_push(heap: Array, item: Dictionary) -> void:
+	heap.append(item)
+	var i := heap.size() - 1
+	while i > 0:
+		var parent := (i - 1) / 2
+		if int(heap[parent]["f"]) <= int(item["f"]):
+			break
+		heap[i] = heap[parent]
+		i = parent
+	heap[i] = item
+
+func _pq_pop(heap: Array) -> Dictionary:
+	if heap.is_empty():
+		return {}
+	var root: Dictionary = heap[0]
+	var last: Variant = heap.pop_back()
+	if heap.is_empty():
+		return root
+	var item: Dictionary = {}
+	if typeof(last) == TYPE_DICTIONARY:
+		item = last
+	var i := 0
+	var size := heap.size()
+	while true:
+		var left := i * 2 + 1
+		if left >= size:
+			break
+		var right := left + 1
+		var smallest := left
+		if right < size and int(heap[right]["f"]) < int(heap[left]["f"]):
+			smallest = right
+		if int(item["f"]) <= int(heap[smallest]["f"]):
+			break
+		heap[i] = heap[smallest]
+		i = smallest
+	heap[i] = item
+	return root
 
 func _start_next_level_countdown() -> void:
 	if editor_preview_active:
@@ -3683,6 +3847,7 @@ func _show_stage_select() -> void:
 	safe_area.visible = false
 	input_enabled = false
 	_clear_animation_layer()
+	_cancel_hint_job("")
 	_stop_next_level_countdown()
 	status_label.text = ""
 	_apply_menu_theme(current_stage)
@@ -3874,6 +4039,7 @@ func _show_level_select() -> void:
 	safe_area.visible = false
 	input_enabled = false
 	_clear_animation_layer()
+	_cancel_hint_job("")
 	_stop_next_level_countdown()
 	var title := level_panel.get_node_or_null("LevelPanelVBox/LevelTitleWrap/LevelTitle") as RichTextLabel
 	if title != null:
@@ -4045,6 +4211,7 @@ func _show_start_screen() -> void:
 	safe_area.visible = false
 	input_enabled = false
 	_clear_animation_layer()
+	_cancel_hint_job("")
 	_stop_next_level_countdown()
 	status_label.text = ""
 	call_deferred("_start_home_fx")
