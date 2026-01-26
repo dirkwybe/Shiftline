@@ -559,14 +559,27 @@ func _update_diagnostics_label() -> void:
 	if diag == null:
 		return
 	var iap_path := "res://ios/plugins/ios-in-app-purchase/ios-in-app-purchase.gdip"
+	var iap_flat_path := "res://ios/plugins/ios-in-app-purchase.gdip"
+	var iap_legacy_path := "res://plugins/ios-in-app-purchase/ios-in-app-purchase.gdip"
 	var iap_file := FileAccess.file_exists(iap_path)
+	var iap_flat_file := FileAccess.file_exists(iap_flat_path)
+	var iap_legacy_file := FileAccess.file_exists(iap_legacy_path)
 	var iap_loaded := iap_singleton != null
 	var music_count := music_track_paths.size()
-	diag.text = "Diagnostics:\n- IAP plugin: %s (gdip: %s)\n- Product ID: %s\n- Music tracks: %d (music %s)" % [
+	var manifest_path := "res://assets/music/music_list.json"
+	var manifest_exists := FileAccess.file_exists(manifest_path)
+	var assets_music_dir := DirAccess.open("res://assets/music") != null
+	var root_music_dir := DirAccess.open("res://music") != null
+	diag.text = "Diagnostics:\n- IAP plugin: %s (gdip: %s, flat: %s, legacy: %s)\n- Product ID: %s\n- Music tracks: %d (assets: %s, root: %s, manifest: %s, music %s)" % [
 		"loaded" if iap_loaded else "missing",
 		"found" if iap_file else "missing",
+		"found" if iap_flat_file else "missing",
+		"found" if iap_legacy_file else "missing",
 		iap_hint_product_id if iap_hint_product_id.strip_edges() != "" else "(not set)",
 		music_count,
+		"ok" if assets_music_dir else "missing",
+		"ok" if root_music_dir else "missing",
+		"found" if manifest_exists else "missing",
 		"on" if music_enabled else "off"
 	]
 
@@ -593,18 +606,46 @@ func _refresh_music_tracks() -> void:
 		while name != "":
 			if not dir.current_is_dir():
 				var ext := name.get_extension().to_lower()
-				if ext in ["mp3", "ogg", "wav"]:
-					var path := "%s/%s" % [base, name]
-					if music_track_paths.has(path):
-						name = dir.get_next()
-						continue
-					var stream: AudioStream = load(path) as AudioStream
+				var load_path := ""
+				if ext == "import":
+					var base_name := name.substr(0, name.length() - 7)
+					var inner_ext := base_name.get_extension().to_lower()
+					if inner_ext in ["mp3", "ogg", "wav"]:
+						load_path = "%s/%s" % [base, base_name]
+				elif ext in ["mp3", "ogg", "wav"]:
+					load_path = "%s/%s" % [base, name]
+				if load_path != "" and not music_track_paths.has(load_path):
+					var stream: AudioStream = load(load_path) as AudioStream
 					if stream != null:
 						music_tracks.append(stream)
-						music_track_paths.append(path)
+						music_track_paths.append(load_path)
 			name = dir.get_next()
 		dir.list_dir_end()
+	if music_track_paths.is_empty():
+		_load_music_manifest("res://assets/music/music_list.json")
 	_update_diagnostics_label()
+
+func _load_music_manifest(path: String) -> void:
+	if not FileAccess.file_exists(path):
+		return
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if typeof(parsed) != TYPE_ARRAY:
+		return
+	var items: Array = parsed
+	for entry in items:
+		if typeof(entry) != TYPE_STRING:
+			continue
+		var rel: String = String(entry)
+		var load_path := "res://assets/music/%s" % rel
+		if music_track_paths.has(load_path):
+			continue
+		var stream: AudioStream = load(load_path) as AudioStream
+		if stream != null:
+			music_tracks.append(stream)
+			music_track_paths.append(load_path)
 
 func _start_music_if_needed() -> void:
 	if not music_enabled:
