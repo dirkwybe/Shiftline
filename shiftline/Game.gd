@@ -2,11 +2,13 @@ extends Control
 
 const SWIPE_THRESHOLD := 20.0
 const DEFAULT_CELL_SIZE := 72
+const STAGE_COUNT := 10
+const LEVELS_PER_STAGE := 20
 const STAGE_CARD_HEIGHT := 140
 const STAGE_GRID_COLUMNS := 2
-const LEVEL_GRID_COLUMNS := 2
-const LEVEL_BUTTON_WIDTH := 120
-const LEVEL_BUTTON_HEIGHT := 90
+const LEVEL_GRID_COLUMNS := 4
+const LEVEL_BUTTON_WIDTH := 96
+const LEVEL_BUTTON_HEIGHT := 78
 const ANIM_DURATION := 0.18
 const SAVE_PATH := "user://progress.json"
 const TILE_TEXTURE_PATH := "res://assets/tiles/tile_base.svg"
@@ -69,20 +71,33 @@ const LEVEL_NAMES := [
 const TILE_OFFSET_BIAS := Vector2(-2, -2)
 const HINT_STEPS_PER_FRAME := 200
 const HINT_MAX_STATES := 8000
+const FREE_HINTS_PER_LEVEL := 1
+const FREE_HINTS_PER_DAY := 1
+const FREE_HINTS_STAGE := 1
+const UI_PRESS_SCALE := 0.96
+const UI_PRESS_TIME := 0.06
+const UI_RELEASE_TIME := 0.12
+const UI_GLOW_MULT := 1.08
 
 @export var sfx_move: AudioStream
 @export var sfx_lock: AudioStream
 @export var sfx_win: AudioStream
 @export var sfx_no_solution: AudioStream
+@export var sfx_ui_click: AudioStream
+@export var sfx_ui_success: AudioStream
 @export var tile_texture: Texture2D
 @export var wall_texture: Texture2D
 @export var dev_mode := false
 @export var sound_enabled := true
+@export var music_enabled := true
+@export var music_volume_db := -8.0
 @export_multiline var about_text: String = "Shiftline is a sliding puzzle about\nmatching colors and finding order.\nMade for iOS."
 @export_multiline var howto_text: String = "[center][b]How to Play[/b][/center]\n\n- Swipe a row or column to slide blocks.\n- Blocks slide until they hit a wall or another locked block.\n- Match blocks to same-colored holes to lock them.\n- Lock all blocks to win.\n\nTip: Use Hint if you get stuck."
 @export var button_font: Font
 @export var wall_tint: Color = Color(1, 1, 1, 1)
 @export var wall_tint_contrast: Color = Color(1, 1, 1, 1)
+@export var hints_unlocked := false
+@export var iap_hint_product_id: String = ""
 
 @onready var background_rect: TextureRect = $Background
 @onready var safe_area: MarginContainer = $SafeArea
@@ -115,6 +130,9 @@ const HINT_MAX_STATES := 8000
 @onready var sfx_lock_player: AudioStreamPlayer = _ensure_sfx_player("SfxLock")
 @onready var sfx_win_player: AudioStreamPlayer = _ensure_sfx_player("SfxWin")
 @onready var sfx_no_solution_player: AudioStreamPlayer = _ensure_sfx_player("SfxNoSolution")
+@onready var sfx_ui_player: AudioStreamPlayer = _ensure_sfx_player("SfxUI")
+@onready var sfx_ui_success_player: AudioStreamPlayer = _ensure_sfx_player("SfxUISuccess")
+@onready var music_player: AudioStreamPlayer = _ensure_music_player("MusicPlayer")
 
 var width := 8
 var height := 8
@@ -156,11 +174,23 @@ var hint_job_active := false
 var hint_job_token := 0
 var hint_job_start_key: String = ""
 var hint_job: Dictionary = {}
+var hint_consume_pending := false
+var hint_consume_key: String = ""
+var hint_uses_by_level: Dictionary = {}
+var daily_hint_date: String = ""
+var daily_hint_used := 0
+var iap_singleton: Object = null
+var iap_hint_display_price: String = ""
+var music_tracks: Array = []
+var music_track_paths: Array = []
+var current_music_index := -1
 var about_body_label: RichTextLabel = null
 var howto_body_label: RichTextLabel = null
 var glow_textures: Dictionary = {}
 var sparkle_rng := RandomNumberGenerator.new()
 var win_rng := RandomNumberGenerator.new()
+var ui_rng := RandomNumberGenerator.new()
+var music_rng := RandomNumberGenerator.new()
 var level_stats: Dictionary = {}
 var level_start_time_msec: int = 0
 var current_level_min_moves: int = -1
@@ -179,6 +209,8 @@ var swipe_start_cell := Vector2i(-1, -1)
 func _ready() -> void:
 	sparkle_rng.randomize()
 	win_rng.randomize()
+	ui_rng.randomize()
+	music_rng.randomize()
 	new_level_button.pressed.connect(_on_new_level_pressed)
 	restart_button.pressed.connect(_on_restart_pressed)
 	if solve_button != null:
@@ -199,9 +231,12 @@ func _ready() -> void:
 	_setup_dev_ui()
 	_ensure_tile_texture()
 	_ensure_wall_texture()
+	_ensure_ui_sfx()
 	_update_about_text()
 	_update_howto_text()
 	_load_settings()
+	_setup_music()
+	_setup_iap()
 	_build_level_paths()
 	_load_progress()
 	_update_stage_buttons()
@@ -403,6 +438,227 @@ func _on_sound_toggled(pressed: bool) -> void:
 	_save_settings()
 	_sync_settings_ui()
 
+func _setup_iap() -> void:
+	if not Engine.has_singleton("IOSInAppPurchase"):
+		iap_singleton = null
+		iap_hint_display_price = ""
+		_update_start_panel_unlock_button()
+		_update_start_panel_restore_button()
+		return
+	iap_singleton = Engine.get_singleton("IOSInAppPurchase")
+	if iap_singleton == null:
+		iap_hint_display_price = ""
+		_update_start_panel_unlock_button()
+		_update_start_panel_restore_button()
+		return
+	var callable := Callable(self, "_on_iap_response")
+	if iap_singleton.has_signal("response") and not iap_singleton.is_connected("response", callable):
+		iap_singleton.connect("response", callable)
+	_iap_request("startUpdateTask", {})
+	_iap_request_products()
+	_iap_restore_purchases()
+	_update_start_panel_unlock_button()
+	_update_start_panel_restore_button()
+
+func _iap_request(name: String, data: Dictionary) -> void:
+	if iap_singleton == null:
+		return
+	iap_singleton.request(name, data)
+
+func _iap_request_products() -> void:
+	if iap_hint_product_id.strip_edges() == "":
+		return
+	_iap_request("products", {"productIDs": [iap_hint_product_id]})
+
+func _iap_restore_purchases() -> void:
+	_iap_request("transactionCurrentEntitlements", {})
+
+func _on_iap_response(response_name: String, data: Dictionary) -> void:
+	if response_name == "products":
+		if String(data.get("result", "")) == "success":
+			var products: Variant = data.get("products", [])
+			if typeof(products) == TYPE_ARRAY:
+				for entry in products:
+					if typeof(entry) != TYPE_DICTIONARY:
+						continue
+					var pid := String(entry.get("id", ""))
+					if pid == iap_hint_product_id:
+						iap_hint_display_price = String(entry.get("displayPrice", ""))
+						break
+		_update_start_panel_unlock_button()
+	elif response_name == "purchase":
+		if String(data.get("result", "")) == "success":
+			var pid := String(data.get("productID", ""))
+			if pid == iap_hint_product_id:
+				_unlock_hints_from_iap()
+	elif response_name == "transactionCurrentEntitlements":
+		if String(data.get("result", "")) == "success":
+			var transactions: Variant = data.get("transactions", [])
+			if typeof(transactions) == TYPE_ARRAY:
+				for entry in transactions:
+					if typeof(entry) == TYPE_DICTIONARY and String(entry.get("productID", "")) == iap_hint_product_id:
+						_unlock_hints_from_iap()
+						break
+
+func _unlock_hints_from_iap() -> void:
+	if hints_unlocked:
+		return
+	hints_unlocked = true
+	_save_settings()
+	_update_start_panel_unlock_button()
+
+func _on_unlock_hints_pressed() -> void:
+	if hints_unlocked:
+		return
+	if iap_singleton == null or iap_hint_product_id.strip_edges() == "":
+		return
+	_iap_request("purchase", {"productID": iap_hint_product_id})
+
+func _on_restore_purchases_pressed() -> void:
+	if iap_singleton == null:
+		return
+	_iap_request("appStoreSync", {})
+	_iap_restore_purchases()
+
+func _update_start_panel_unlock_button() -> void:
+	if start_panel == null:
+		return
+	var unlock := start_panel.get_node_or_null("StartLayout/StartBox/StartVBox/StartUnlockHintsButton") as Button
+	if unlock == null:
+		return
+	if hints_unlocked:
+		unlock.text = "Hints Unlocked"
+		unlock.disabled = true
+	else:
+		if iap_hint_display_price.strip_edges() != "":
+			unlock.text = "Unlock Hints (%s)" % iap_hint_display_price
+		else:
+			unlock.text = "Unlock Hints"
+		unlock.disabled = (iap_singleton == null or iap_hint_product_id.strip_edges() == "")
+
+func _update_start_panel_restore_button() -> void:
+	if start_panel == null:
+		return
+	var restore := start_panel.get_node_or_null("StartLayout/StartBox/StartVBox/StartRestoreButton") as Button
+	if restore == null:
+		return
+	restore.text = "Restore Purchases"
+	restore.disabled = (iap_singleton == null)
+
+func _setup_music() -> void:
+	if music_player == null:
+		return
+	music_player.volume_db = music_volume_db
+	if not music_player.finished.is_connected(_on_music_finished):
+		music_player.finished.connect(_on_music_finished)
+	_refresh_music_tracks()
+	_start_music_if_needed()
+
+func _refresh_music_tracks() -> void:
+	music_tracks.clear()
+	music_track_paths.clear()
+	var dir := DirAccess.open("res://assets/music")
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var name := dir.get_next()
+	while name != "":
+		if not dir.current_is_dir():
+			var ext := name.get_extension().to_lower()
+			if ext in ["mp3", "ogg", "wav"]:
+				var path := "res://assets/music/%s" % name
+				var stream: AudioStream = load(path) as AudioStream
+				if stream != null:
+					music_tracks.append(stream)
+					music_track_paths.append(path)
+		name = dir.get_next()
+	dir.list_dir_end()
+
+func _start_music_if_needed() -> void:
+	if not music_enabled:
+		_stop_music()
+		return
+	if music_tracks.is_empty():
+		return
+	if music_player != null and music_player.playing:
+		return
+	_play_next_track()
+
+func _stop_music() -> void:
+	if music_player != null and music_player.playing:
+		music_player.stop()
+
+func _play_next_track() -> void:
+	if music_player == null or music_tracks.is_empty():
+		return
+	var count := music_tracks.size()
+	var next_index := music_rng.randi_range(0, count - 1)
+	if count > 1 and next_index == current_music_index:
+		next_index = (next_index + 1 + music_rng.randi_range(0, count - 2)) % count
+	current_music_index = next_index
+	music_player.stream = music_tracks[next_index]
+	music_player.play()
+
+func _on_music_finished() -> void:
+	if not music_enabled:
+		return
+	_play_next_track()
+
+func _on_music_toggled(pressed: bool) -> void:
+	music_enabled = pressed
+	_save_settings()
+	_sync_settings_ui()
+	if pressed:
+		_refresh_music_tracks()
+		_start_music_if_needed()
+	else:
+		_stop_music()
+
+func _current_day_key() -> String:
+	var date: Dictionary = Time.get_date_dict_from_system()
+	if date.is_empty():
+		return ""
+	return "%04d-%02d-%02d" % [int(date.get("year", 0)), int(date.get("month", 0)), int(date.get("day", 0))]
+
+func _refresh_daily_hint() -> void:
+	var today := _current_day_key()
+	if today == "":
+		return
+	if daily_hint_date != today:
+		daily_hint_date = today
+		daily_hint_used = 0
+		_save_settings()
+
+func _hint_available() -> bool:
+	if dev_mode or hints_unlocked:
+		return true
+	if current_stage <= FREE_HINTS_STAGE:
+		return true
+	_refresh_daily_hint()
+	var key := _level_key(current_stage, current_level_in_stage)
+	var used := int(hint_uses_by_level.get(key, 0))
+	if used < FREE_HINTS_PER_LEVEL:
+		return true
+	if daily_hint_used < FREE_HINTS_PER_DAY:
+		return true
+	return false
+
+func _consume_hint() -> void:
+	if dev_mode or hints_unlocked:
+		return
+	if current_stage <= FREE_HINTS_STAGE:
+		return
+	_refresh_daily_hint()
+	var key := _level_key(current_stage, current_level_in_stage)
+	var used := int(hint_uses_by_level.get(key, 0))
+	if used < FREE_HINTS_PER_LEVEL:
+		hint_uses_by_level[key] = used + 1
+		_save_progress()
+		return
+	if daily_hint_used < FREE_HINTS_PER_DAY:
+		daily_hint_used += 1
+		_save_settings()
+
 func _on_reset_progress_pressed() -> void:
 	_show_reset_confirm()
 
@@ -418,6 +674,7 @@ func _on_reset_confirm_yes() -> void:
 	_hide_reset_confirm()
 	stage_progress = {}
 	level_stats = {}
+	hint_uses_by_level = {}
 	unlocked_stage = 1
 	current_stage = 1
 	current_level_in_stage = 1
@@ -436,6 +693,12 @@ func _ensure_wall_texture() -> void:
 	var tex := load(WALL_TEXTURE_PATH) as Texture2D
 	if tex != null:
 		wall_texture = tex
+
+func _ensure_ui_sfx() -> void:
+	if sfx_ui_click == null:
+		sfx_ui_click = load("res://assets/sounds/ui_click.wav") as AudioStream
+	if sfx_ui_success == null:
+		sfx_ui_success = load("res://assets/sounds/ui_success.wav") as AudioStream
 
 func _update_about_text() -> void:
 	if about_body_label != null:
@@ -553,6 +816,8 @@ func _finish_hint_job(path: Array, capped: bool, start_key: String) -> void:
 	if hint_button != null:
 		hint_button.disabled = false
 	if _grid_key(grid) != start_key:
+		hint_consume_pending = false
+		hint_consume_key = ""
 		return
 	if path.is_empty():
 		cached_hint_key = start_key
@@ -564,6 +829,8 @@ func _finish_hint_job(path: Array, capped: bool, start_key: String) -> void:
 		else:
 			status_label.text = "No solution found. Press Restart."
 			_play_sfx(sfx_no_solution, sfx_no_solution_player)
+		hint_consume_pending = false
+		hint_consume_key = ""
 		return
 	cached_hint_key = start_key
 	cached_hint_path = path.duplicate()
@@ -572,6 +839,10 @@ func _finish_hint_job(path: Array, capped: bool, start_key: String) -> void:
 	var move: Dictionary = path[0]
 	_show_debug_line(move["is_row"], move["index"], int(move["dir"]), 0.8)
 	status_label.text = "Hint shown"
+	if hint_consume_pending and hint_consume_key == start_key:
+		_consume_hint()
+	hint_consume_pending = false
+	hint_consume_key = ""
 
 func _cancel_hint_job(message: String) -> void:
 	if not hint_job_active:
@@ -581,6 +852,8 @@ func _cancel_hint_job(message: String) -> void:
 	hint_job_token += 1
 	if hint_button != null:
 		hint_button.disabled = false
+	hint_consume_pending = false
+	hint_consume_key = ""
 	if message != "":
 		status_label.text = message
 
@@ -643,6 +916,9 @@ func _on_hint_pressed() -> void:
 	if _is_win():
 		status_label.text = "Already solved"
 		return
+	if not _hint_available():
+		status_label.text = "No free hints left. Unlock hints on Home."
+		return
 	var current_key := _grid_key(grid)
 	if hint_job_active:
 		status_label.text = "Searching for hint..."
@@ -652,6 +928,7 @@ func _on_hint_pressed() -> void:
 			var cached_move: Dictionary = cached_hint_path[0]
 			_show_debug_line(cached_move["is_row"], cached_move["index"], int(cached_move["dir"]), 0.8)
 			status_label.text = "Hint shown"
+			_consume_hint()
 			return
 		if cached_hint_capped:
 			status_label.text = "Hint search limit reached. Try Restart."
@@ -660,6 +937,8 @@ func _on_hint_pressed() -> void:
 			status_label.text = "No solution found. Press Restart."
 			_play_sfx(sfx_no_solution, sfx_no_solution_player)
 			return
+	hint_consume_pending = true
+	hint_consume_key = current_key
 	_start_hint_job(current_key, HINT_MAX_STATES)
 
 func _on_options_pressed() -> void:
@@ -717,25 +996,20 @@ func _wire_options_panel(panel: Control) -> void:
 
 	var options_box: PanelContainer = panel.get_node_or_null("OptionsLayout/OptionsCenter/OptionsBox") as PanelContainer
 	if options_box != null:
+		options_box.custom_minimum_size = Vector2(300, 200)
 		_apply_glass_panel(options_box)
-
-	var contrast: CheckButton = panel.get_node_or_null("OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox/HighContrastCheck") as CheckButton
-	if contrast != null:
-		contrast.button_pressed = high_contrast
-		if not contrast.toggled.is_connected(_on_high_contrast_toggled):
-			contrast.toggled.connect(_on_high_contrast_toggled)
-
-	var large: CheckButton = panel.get_node_or_null("OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox/LargeTilesCheck") as CheckButton
-	if large != null:
-		large.button_pressed = large_tiles
-		if not large.toggled.is_connected(_on_large_tiles_toggled):
-			large.toggled.connect(_on_large_tiles_toggled)
 
 	var sound: CheckButton = panel.get_node_or_null("OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox/SoundCheck") as CheckButton
 	if sound != null:
 		sound.button_pressed = sound_enabled
 		if not sound.toggled.is_connected(_on_sound_toggled):
 			sound.toggled.connect(_on_sound_toggled)
+
+	var music: CheckButton = panel.get_node_or_null("OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox/MusicCheck") as CheckButton
+	if music != null:
+		music.button_pressed = music_enabled
+		if not music.toggled.is_connected(_on_music_toggled):
+			music.toggled.connect(_on_music_toggled)
 
 	var reset: Button = panel.get_node_or_null("OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox/ResetProgressButton") as Button
 	if reset != null:
@@ -820,7 +1094,7 @@ func _ensure_options_panel() -> Control:
 
 	var center := PanelContainer.new()
 	center.name = "OptionsBox"
-	center.custom_minimum_size = Vector2(300, 200)
+	center.custom_minimum_size = Vector2(300, 240)
 	center.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	center_wrap.add_child(center)
 
@@ -833,24 +1107,19 @@ func _ensure_options_panel() -> Control:
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	center.add_child(vbox)
 
-	var contrast := CheckButton.new()
-	contrast.name = "HighContrastCheck"
-	contrast.text = "High Contrast"
-	contrast.toggled.connect(_on_high_contrast_toggled)
-	vbox.add_child(contrast)
-
-	var large := CheckButton.new()
-	large.name = "LargeTilesCheck"
-	large.text = "Large Tiles"
-	large.toggled.connect(_on_large_tiles_toggled)
-	vbox.add_child(large)
-
 	var sound := CheckButton.new()
 	sound.name = "SoundCheck"
 	sound.text = "Sound"
 	sound.button_pressed = sound_enabled
 	sound.toggled.connect(_on_sound_toggled)
 	vbox.add_child(sound)
+
+	var music := CheckButton.new()
+	music.name = "MusicCheck"
+	music.text = "Music"
+	music.button_pressed = music_enabled
+	music.toggled.connect(_on_music_toggled)
+	vbox.add_child(music)
 
 	var reset := Button.new()
 	reset.name = "ResetProgressButton"
@@ -912,11 +1181,18 @@ func _ensure_start_panel() -> Control:
 			if not play.pressed.is_connected(_show_stage_select):
 				play.pressed.connect(_show_stage_select)
 			_style_start_button(play, Color8(83, 201, 255))
-		var editor := panel.get_node_or_null("StartLayout/StartBox/StartVBox/StartEditorButton") as Button
-		if editor != null:
-			if not editor.pressed.is_connected(_open_level_editor):
-				editor.pressed.connect(_open_level_editor)
-			_style_start_button(editor, Color8(183, 109, 255))
+		var unlock := panel.get_node_or_null("StartLayout/StartBox/StartVBox/StartUnlockHintsButton") as Button
+		if unlock != null:
+			if not unlock.pressed.is_connected(_on_unlock_hints_pressed):
+				unlock.pressed.connect(_on_unlock_hints_pressed)
+			_style_start_button(unlock, Color8(255, 122, 122))
+			_update_start_panel_unlock_button()
+		var restore := panel.get_node_or_null("StartLayout/StartBox/StartVBox/StartRestoreButton") as Button
+		if restore != null:
+			if not restore.pressed.is_connected(_on_restore_purchases_pressed):
+				restore.pressed.connect(_on_restore_purchases_pressed)
+			_style_start_button(restore, Color8(83, 201, 255))
+			_update_start_panel_restore_button()
 		var options := panel.get_node_or_null("StartLayout/StartBox/StartVBox/StartOptionsButton") as Button
 		if options != null:
 			options.pressed.connect(func() -> void:
@@ -939,6 +1215,7 @@ func _ensure_start_panel() -> Control:
 			_style_start_button(howto, Color8(109, 255, 160))
 		var box := panel.get_node_or_null("StartLayout/StartBox") as PanelContainer
 		if box != null:
+			box.custom_minimum_size = Vector2(360, 500)
 			_apply_glass_panel(box)
 		var top_spacer := panel.get_node_or_null("StartLayout/StartSpacer") as Control
 		if top_spacer != null:
@@ -986,7 +1263,7 @@ func _ensure_start_panel() -> Control:
 
 	var center := PanelContainer.new()
 	center.name = "StartBox"
-	center.custom_minimum_size = Vector2(360, 380)
+	center.custom_minimum_size = Vector2(360, 500)
 	center.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	center.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_apply_glass_panel(center)
@@ -1015,13 +1292,21 @@ func _ensure_start_panel() -> Control:
 	_style_start_button(play, Color8(83, 201, 255))
 	vbox.add_child(play)
 
-	var editor := Button.new()
-	editor.name = "StartEditorButton"
-	editor.text = "Level Editor"
-	editor.custom_minimum_size = Vector2(0, 54)
-	editor.pressed.connect(_open_level_editor)
-	_style_start_button(editor, Color8(183, 109, 255))
-	vbox.add_child(editor)
+	var unlock := Button.new()
+	unlock.name = "StartUnlockHintsButton"
+	unlock.text = "Unlock Hints"
+	unlock.custom_minimum_size = Vector2(0, 54)
+	unlock.pressed.connect(_on_unlock_hints_pressed)
+	_style_start_button(unlock, Color8(255, 122, 122))
+	vbox.add_child(unlock)
+
+	var restore := Button.new()
+	restore.name = "StartRestoreButton"
+	restore.text = "Restore Purchases"
+	restore.custom_minimum_size = Vector2(0, 48)
+	restore.pressed.connect(_on_restore_purchases_pressed)
+	_style_start_button(restore, Color8(83, 201, 255))
+	vbox.add_child(restore)
 
 	var options := Button.new()
 	options.text = "Options"
@@ -1095,6 +1380,73 @@ func _style_start_button(btn: Button, color: Color) -> void:
 	btn.add_theme_stylebox_override("hover", hover)
 	btn.add_theme_stylebox_override("pressed", pressed)
 	btn.add_theme_stylebox_override("focus", focus)
+	_attach_button_feedback(btn)
+
+func _attach_button_feedback(btn: Button) -> void:
+	if btn == null or not is_instance_valid(btn):
+		return
+	if btn.has_meta("feedback_attached"):
+		return
+	btn.set_meta("feedback_attached", true)
+	btn.button_down.connect(_on_button_down.bind(btn))
+	btn.button_up.connect(_on_button_up.bind(btn))
+	btn.pressed.connect(_on_button_pressed.bind(btn))
+
+func _on_button_down(btn: Button) -> void:
+	if btn == null or not is_instance_valid(btn):
+		return
+	if btn.disabled:
+		return
+	btn.pivot_offset = btn.size * 0.5
+	if not btn.has_meta("orig_scale"):
+		btn.set_meta("orig_scale", btn.scale)
+	if not btn.has_meta("orig_modulate"):
+		btn.set_meta("orig_modulate", btn.modulate)
+	if btn.has_meta("press_tween"):
+		var old: Variant = btn.get_meta("press_tween")
+		if old is Tween:
+			old.kill()
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(btn, "scale", Vector2(UI_PRESS_SCALE, UI_PRESS_SCALE), UI_PRESS_TIME)
+	tween.parallel().tween_property(btn, "modulate", Color(UI_GLOW_MULT, UI_GLOW_MULT, UI_GLOW_MULT, 1.0), UI_PRESS_TIME)
+	btn.set_meta("press_tween", tween)
+
+func _on_button_up(btn: Button) -> void:
+	if btn == null or not is_instance_valid(btn):
+		return
+	var orig_scale: Vector2 = btn.get_meta("orig_scale", Vector2.ONE)
+	var orig_modulate: Color = btn.get_meta("orig_modulate", Color(1, 1, 1, 1))
+	if btn.has_meta("press_tween"):
+		var old: Variant = btn.get_meta("press_tween")
+		if old is Tween:
+			old.kill()
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(btn, "scale", orig_scale, UI_RELEASE_TIME)
+	tween.parallel().tween_property(btn, "modulate", orig_modulate, UI_RELEASE_TIME)
+	btn.set_meta("press_tween", tween)
+
+func _on_button_pressed(btn: Button) -> void:
+	if btn == null or not is_instance_valid(btn):
+		return
+	_play_ui_click()
+	haptic_light()
+
+func _play_ui_click() -> void:
+	if sfx_ui_click == null or sfx_ui_player == null or not sound_enabled:
+		return
+	var pitch := 1.0
+	if ui_rng != null:
+		pitch += ui_rng.randf_range(-0.04, 0.04)
+	sfx_ui_player.pitch_scale = pitch
+	_play_sfx(sfx_ui_click, sfx_ui_player)
+
+func _play_ui_success() -> void:
+	if sfx_ui_success == null or sfx_ui_success_player == null or not sound_enabled:
+		return
+	sfx_ui_success_player.pitch_scale = 1.0
+	_play_sfx(sfx_ui_success, sfx_ui_success_player)
 
 func _apply_glass_panel(panel: PanelContainer) -> void:
 	if panel == null:
@@ -1189,6 +1541,7 @@ func _style_stage_card(btn: Button, theme_index: int, locked: bool, unplayed: bo
 	btn.add_theme_stylebox_override("hover", hover)
 	btn.add_theme_stylebox_override("pressed", pressed)
 	btn.add_theme_stylebox_override("disabled", normal)
+	_attach_button_feedback(btn)
 
 func _style_level_button(btn: Button, theme_index: int, locked: bool) -> void:
 	var accent: Color = THEME_ACCENTS[clampi(theme_index, 0, THEME_ACCENTS.size() - 1)]
@@ -1221,6 +1574,7 @@ func _style_level_button(btn: Button, theme_index: int, locked: bool) -> void:
 	btn.add_theme_stylebox_override("normal", normal)
 	btn.add_theme_stylebox_override("hover", hover)
 	btn.add_theme_stylebox_override("pressed", pressed)
+	_attach_button_feedback(btn)
 
 func _clear_pulses() -> void:
 	for row in cells:
@@ -1917,7 +2271,7 @@ func _finalize_swipe(hidden_blocks: Array, ghosts: Array, next_grid: Array, next
 		_record_level_stats()
 		_update_hud()
 		_mark_level_complete()
-		if current_level_in_stage >= 10:
+		if current_level_in_stage >= LEVELS_PER_STAGE:
 			_show_stage_complete()
 		else:
 			_start_next_level_countdown()
@@ -2563,7 +2917,7 @@ func _pq_pop(heap: Array) -> Dictionary:
 func _start_next_level_countdown() -> void:
 	if editor_preview_active:
 		return
-	if current_level_in_stage >= 10:
+	if current_level_in_stage >= LEVELS_PER_STAGE:
 		return
 	if not _can_advance_level():
 		return
@@ -2686,7 +3040,7 @@ func _record_level_stats() -> void:
 
 func _can_advance_level() -> bool:
 	var completed: int = int(stage_progress.get(str(current_stage), 0))
-	var max_unlocked: int = min(completed + 1, 10)
+	var max_unlocked: int = min(completed + 1, LEVELS_PER_STAGE)
 	return current_level_in_stage < max_unlocked
 
 func _cell_from_global_pos(pos: Vector2) -> Vector2i:
@@ -3072,6 +3426,16 @@ func _ensure_sfx_player(node_name: String) -> AudioStreamPlayer:
 	add_child(player)
 	return player
 
+func _ensure_music_player(node_name: String) -> AudioStreamPlayer:
+	var existing := get_node_or_null(node_name)
+	if existing != null and existing is AudioStreamPlayer:
+		return existing as AudioStreamPlayer
+	var player := AudioStreamPlayer.new()
+	player.name = node_name
+	player.volume_db = music_volume_db
+	add_child(player)
+	return player
+
 func _on_move_feedback() -> void:
 	_play_sfx(sfx_move, sfx_move_player)
 	haptic_light()
@@ -3422,11 +3786,11 @@ func _update_debug_overlay() -> void:
 
 func _build_level_paths() -> void:
 	level_paths = []
-	for i in range(1, 101):
-		level_paths.append("res://levels/level_%02d.json" % i)
+	for i in range(1, STAGE_COUNT * LEVELS_PER_STAGE + 1):
+		level_paths.append("res://levels/level_%03d.json" % i)
 
 func _level_path_for(stage: int, level_in_stage: int) -> String:
-	var index := (stage - 1) * 10 + (level_in_stage - 1)
+	var index := (stage - 1) * LEVELS_PER_STAGE + (level_in_stage - 1)
 	if index < 0 or index >= level_paths.size():
 		return ""
 	return level_paths[index]
@@ -3434,18 +3798,22 @@ func _level_path_for(stage: int, level_in_stage: int) -> String:
 func _mark_level_complete() -> void:
 	var key := str(current_stage)
 	var current_max := int(stage_progress.get(key, 0))
-	if current_level_in_stage > current_max:
+	var unlocked := current_level_in_stage > current_max
+	if unlocked:
 		stage_progress[key] = current_level_in_stage
 	_save_progress()
-	if current_level_in_stage >= 10 and current_stage == unlocked_stage and current_stage < 10:
+	if current_level_in_stage >= LEVELS_PER_STAGE and current_stage == unlocked_stage and current_stage < STAGE_COUNT:
 		unlocked_stage += 1
 	_save_progress()
+	if unlocked:
+		_play_ui_success()
 	_update_stage_buttons()
 	_update_hud()
 
 func _load_progress() -> void:
 	stage_progress = {}
 	level_stats = {}
+	hint_uses_by_level = {}
 	unlocked_stage = 1
 	if not FileAccess.file_exists(SAVE_PATH):
 		return
@@ -3467,12 +3835,17 @@ func _load_progress() -> void:
 			var entry: Variant = stats[key]
 			if typeof(entry) == TYPE_DICTIONARY:
 				level_stats[str(key)] = entry
+	var hints: Variant = data.get("hint_uses", {})
+	if typeof(hints) == TYPE_DICTIONARY:
+		for key in hints.keys():
+			hint_uses_by_level[str(key)] = int(hints[key])
 
 func _save_progress() -> void:
 	var data := {
 		"unlocked_stage": unlocked_stage,
 		"stage_progress": stage_progress,
-		"level_stats": level_stats
+		"level_stats": level_stats,
+		"hint_uses": hint_uses_by_level
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -3498,16 +3871,28 @@ func _load_settings() -> void:
 		return
 	var data: Dictionary = parsed
 	sound_enabled = bool(data.get("sound_enabled", true))
+	music_enabled = bool(data.get("music_enabled", true))
+	hints_unlocked = bool(data.get("hints_unlocked", hints_unlocked))
+	daily_hint_date = String(data.get("daily_hint_date", ""))
+	daily_hint_used = int(data.get("daily_hint_used", 0))
+	_refresh_daily_hint()
 	_sync_settings_ui()
 
 func _sync_settings_ui() -> void:
 	var sound := options_panel.get_node_or_null("OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox/SoundCheck") as CheckButton
 	if sound != null:
 		sound.button_pressed = sound_enabled
+	var music := options_panel.get_node_or_null("OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox/MusicCheck") as CheckButton
+	if music != null:
+		music.button_pressed = music_enabled
 
 func _save_settings() -> void:
 	var data := {
-		"sound_enabled": sound_enabled
+		"sound_enabled": sound_enabled,
+		"music_enabled": music_enabled,
+		"hints_unlocked": hints_unlocked,
+		"daily_hint_date": daily_hint_date,
+		"daily_hint_used": daily_hint_used
 	}
 	var file := FileAccess.open(settings_path, FileAccess.WRITE)
 	if file == null:
@@ -3593,7 +3978,7 @@ func _populate_stage_grid(grid: GridContainer) -> void:
 		var progress := ProgressBar.new()
 		progress.name = "StageProgress%d" % i
 		progress.min_value = 0
-		progress.max_value = 10
+		progress.max_value = LEVELS_PER_STAGE
 		progress.value = 0
 		progress.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		progress.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -3703,7 +4088,7 @@ func _ensure_stage_panel() -> Control:
 	var vsep := 40
 	grid.add_theme_constant_override("hseparation", hsep)
 	grid.add_theme_constant_override("vseparation", vsep)
-	var rows := int(ceil(10.0 / float(grid.columns)))
+	var rows := int(ceil(float(STAGE_COUNT) / float(grid.columns)))
 	var col_gaps := maxi(0, STAGE_GRID_COLUMNS - 1)
 	var row_gaps := maxi(0, rows - 1)
 	var grid_width: float = float(STAGE_GRID_COLUMNS * STAGE_CARD_HEIGHT + col_gaps * hsep)
@@ -3747,7 +4132,7 @@ func _update_stage_buttons() -> void:
 		grid = stage_panel.get_node_or_null("StagePanelVBox/StageGridMargin/StageGridScroll/StageGrid") as GridContainer
 	if grid == null:
 		return
-	for i in range(1, 11):
+	for i in range(1, STAGE_COUNT + 1):
 		var completed := int(stage_progress.get(str(i), 0))
 		var btn := grid.get_node("StageButton%d" % i) as Button
 		var name_label := grid.get_node("StageButton%d/StageContent%d/StageName%d" % [i, i, i]) as Label
@@ -3760,6 +4145,7 @@ func _update_stage_buttons() -> void:
 		name_label.text = "Stage %d" % i
 		if theme_label != null:
 			theme_label.text = THEME_NAMES[theme_index]
+		progress.max_value = LEVELS_PER_STAGE
 		progress.value = completed
 		var locked := i > unlocked_stage
 		var unplayed := completed == 0
@@ -3788,6 +4174,9 @@ func _wire_level_panel(panel: Control) -> void:
 
 	var grid := panel.get_node_or_null("LevelPanelVBox/LevelGridRow/LevelGridMargin/LevelGrid") as GridContainer
 	if grid != null:
+		grid.columns = LEVEL_GRID_COLUMNS
+		grid.add_theme_constant_override("hseparation", 18)
+		grid.add_theme_constant_override("vseparation", 16)
 		_populate_level_grid(grid)
 
 	var home: Button = panel.get_node_or_null("LevelHomeBar/LevelHomeWrap/LevelHomeButton") as Button
@@ -3802,7 +4191,7 @@ func _populate_level_grid(grid: GridContainer) -> void:
 		return
 	if grid.columns <= 0:
 		grid.columns = LEVEL_GRID_COLUMNS
-	for i in range(1, 11):
+	for i in range(1, LEVELS_PER_STAGE + 1):
 		var btn := Button.new()
 		btn.name = "LevelButton%d" % i
 		btn.text = ""
@@ -3825,14 +4214,14 @@ func _populate_level_grid(grid: GridContainer) -> void:
 		var label := Label.new()
 		label.name = "LevelLabel%d" % i
 		label.text = "Level %d" % i
-		label.add_theme_font_size_override("font_size", 20)
+		label.add_theme_font_size_override("font_size", 18)
 		label.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
 		content.add_child(label)
 
 		var tick := Label.new()
 		tick.name = "LevelTick%d" % i
 		tick.text = ""
-		tick.add_theme_font_size_override("font_size", 18)
+		tick.add_theme_font_size_override("font_size", 16)
 		tick.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
 		content.add_child(tick)
 
@@ -3992,8 +4381,8 @@ func _ensure_level_panel() -> Control:
 	grid.columns = LEVEL_GRID_COLUMNS
 	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var hsep := 120
-	var vsep := 80
+	var hsep := 18
+	var vsep := 16
 	grid.add_theme_constant_override("hseparation", hsep)
 	grid.add_theme_constant_override("vseparation", vsep)
 	grid_margin.add_child(grid)
@@ -4056,7 +4445,7 @@ func _update_level_buttons() -> void:
 	var completed := int(stage_progress.get(str(current_stage), 0))
 	var theme_index: int = clampi(current_stage - 1, 0, THEME_ACCENTS.size() - 1)
 	var unlocked_limit: int = max(completed + 1, current_level_in_stage)
-	for i in range(1, 11):
+	for i in range(1, LEVELS_PER_STAGE + 1):
 		var btn := grid.get_node("LevelButton%d" % i) as Button
 		if btn == null:
 			continue
@@ -4069,7 +4458,7 @@ func _update_level_buttons() -> void:
 		var tick := btn.get_node_or_null("LevelContent%d/LevelTick%d" % [i, i]) as Label
 		if tick != null:
 			tick.text = "✓" if i <= completed else ""
-		var locked: bool = i > min(unlocked_limit, 10)
+		var locked: bool = i > min(unlocked_limit, LEVELS_PER_STAGE)
 		btn.disabled = locked
 		_style_level_button(btn, theme_index, locked)
 
@@ -4176,7 +4565,7 @@ func _show_stage_complete() -> void:
 	input_enabled = false
 	var label := stage_complete_popup.get_node_or_null("StageCompleteCenter/StageCompletePanel/StageCompleteVBox/StageCompleteLabel") as Label
 	var next := stage_complete_popup.get_node_or_null("StageCompleteCenter/StageCompletePanel/StageCompleteVBox/StageCompleteButtons/StageCompleteNextButton") as Button
-	if current_stage >= 10:
+	if current_stage >= STAGE_COUNT:
 		if label != null:
 			label.text = "All Stages Complete!"
 		if next != null:
@@ -4191,7 +4580,7 @@ func _on_stage_complete_pressed() -> void:
 	_show_stage_select()
 
 func _on_stage_complete_next_pressed() -> void:
-	if current_stage < 10:
+	if current_stage < STAGE_COUNT:
 		current_stage += 1
 		current_level_in_stage = 1
 		new_level()
@@ -4214,6 +4603,8 @@ func _show_start_screen() -> void:
 	_cancel_hint_job("")
 	_stop_next_level_countdown()
 	status_label.text = ""
+	_update_start_panel_unlock_button()
+	_update_start_panel_restore_button()
 	call_deferred("_start_home_fx")
 	if background_rect != null:
 		background_rect.visible = false
@@ -4255,9 +4646,9 @@ func _start_current_level() -> void:
 	new_level()
 
 func _next_unlocked_level() -> Vector2i:
-	var stage := clampi(unlocked_stage, 1, 10)
+	var stage := clampi(unlocked_stage, 1, STAGE_COUNT)
 	var completed := int(stage_progress.get(str(stage), 0))
-	var level := clampi(completed + 1, 1, 10)
+	var level := clampi(completed + 1, 1, LEVELS_PER_STAGE)
 	return Vector2i(stage, level)
 
 func _on_solve_pressed() -> void:

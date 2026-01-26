@@ -1,0 +1,24 @@
+Shiftline App Store Checklist
+
+Release Settings
+- Set Main node `dev_mode` = false (res://Game.gd export)
+- Confirm Solve button hidden in production (dev only)
+- Ensure Level Editor is not reachable from UI (StartEditor removed)
+
+IAP (Hints)
+- Set `iap_hint_product_id` on Main node (non-consumable)
+- Test purchase and restore on device with sandbox account
+- Verify Unlock button shows price and disables after purchase
+
+Audio
+- Confirm music files are licensed and placed in res://assets/music
+- Verify Sound and Music toggles work and persist
+
+Content + Metadata
+- Update About text if needed (email/credits)
+- Verify PrivacyInfo.xcprivacy matches data usage
+
+QA
+- Playthrough a few stages; confirm hint limits after Stage 1
+- Check orientation (portrait), layout, and safe-area padding
+- Test on older device for performance (hint solver, animations)

@@ -34,6 +34,7 @@ matching colors and finding order.
 Made for iOS.
 
 If you have any questions or feedback, please send an email to Dirk: dirkwybe@gmail.com"
+iap_hint_product_id = "com.dirkwybe.shiftline.hints_unlimited"
 
 [node name="Background" type="TextureRect" parent="."]
 visible = false
@@ -83,7 +84,7 @@ layout_mode = 2
 size_flags_vertical = 3
 
 [node name="StartBox" type="PanelContainer" parent="StartPanel/StartLayout"]
-custom_minimum_size = Vector2(360, 380)
+custom_minimum_size = Vector2(360, 500)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
@@ -102,10 +103,15 @@ custom_minimum_size = Vector2(0, 60)
 layout_mode = 2
 text = "Select Stage"
 
-[node name="StartEditorButton" type="Button" parent="StartPanel/StartLayout/StartBox/StartVBox"]
+[node name="StartUnlockHintsButton" type="Button" parent="StartPanel/StartLayout/StartBox/StartVBox"]
 custom_minimum_size = Vector2(0, 54)
 layout_mode = 2
-text = "Level Editor"
+text = "Unlock Hints"
+
+[node name="StartRestoreButton" type="Button" parent="StartPanel/StartLayout/StartBox/StartVBox"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+text = "Restore Purchases"
 
 [node name="StartOptionsButton" type="Button" parent="StartPanel/StartLayout/StartBox/StartVBox"]
 custom_minimum_size = Vector2(0, 54)
@@ -300,7 +306,7 @@ theme_override_constants/margin_bottom = 32
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-columns = 2
+columns = 4
 
 [node name="LevelGridRightSpacer" type="Control" parent="LevelPanel/LevelPanelVBox/LevelGridRow"]
 layout_mode = 2
@@ -404,20 +410,15 @@ layout_mode = 2
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="HighContrastCheck" type="CheckButton" parent="OptionsPanel/OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 20
-text = "High Contrast"
-
-[node name="LargeTilesCheck" type="CheckButton" parent="OptionsPanel/OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 20
-text = "Large Tiles"
-
 [node name="SoundCheck" type="CheckButton" parent="OptionsPanel/OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "Sound"
+
+[node name="MusicCheck" type="CheckButton" parent="OptionsPanel/OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Music"
 
 [node name="ResetProgressButton" type="Button" parent="OptionsPanel/OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox"]
 layout_mode = 2
@@ -778,20 +779,16 @@ layout_mode = 2
 theme_override_constants/separation = 12
 
 [node name="TopBarCard" type="PanelContainer" parent="SafeArea/VBoxContainer"]
+custom_minimum_size = Vector2(0, 96)
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 0
-custom_minimum_size = Vector2(0, 96)
 
 [node name="TopBar" type="VBoxContainer" parent="SafeArea/VBoxContainer/TopBarCard"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 0
 theme_override_constants/separation = 4
-
-[node name="GridTopSpacer" type="Control" parent="SafeArea/VBoxContainer"]
-layout_mode = 2
-size_flags_vertical = 3
 
 [node name="HeaderLabel" type="RichTextLabel" parent="SafeArea/VBoxContainer/TopBarCard/TopBar"]
 layout_mode = 2
@@ -809,19 +806,23 @@ layout_mode = 2
 size_flags_horizontal = 3
 text = "Moves: 0"
 
+[node name="GridTopSpacer" type="Control" parent="SafeArea/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
 [node name="CenterContainer" type="CenterContainer" parent="SafeArea/VBoxContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
 
-[node name="GridBottomSpacer" type="Control" parent="SafeArea/VBoxContainer"]
-layout_mode = 2
-size_flags_vertical = 3
-
 [node name="GridContainer" type="GridContainer" parent="SafeArea/VBoxContainer/CenterContainer"]
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
+
+[node name="GridBottomSpacer" type="Control" parent="SafeArea/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
 
 [node name="DevPanel" type="CenterContainer" parent="SafeArea/VBoxContainer"]
 visible = false

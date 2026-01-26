@@ -1,0 +1,69 @@
+{
+  "width": 8,
+  "height": 8,
+  "palette": [
+    "#3C78DC",
+    "#E65050",
+    "#50BE78",
+    "#E6C846"
+  ],
+  "walls": [
+    [
+      2,
+      4
+    ],
+    [
+      6,
+      7
+    ]
+  ],
+  "blocks": [
+    {
+      "pos": [
+        6,
+        0
+      ],
+      "color": 0
+    },
+    {
+      "pos": [
+        7,
+        0
+      ],
+      "color": 1
+    },
+    {
+      "pos": [
+        7,
+        3
+      ],
+      "color": 2
+    }
+  ],
+  "holes": [
+    {
+      "pos": [
+        1,
+        0
+      ],
+      "color": 0
+    },
+    {
+      "pos": [
+        2,
+        0
+      ],
+      "color": 1
+    },
+    {
+      "pos": [
+        2,
+        3
+      ],
+      "color": 2
+    }
+  ],
+  "bouncers": [],
+  "difficulty": 4,
+  "difficulty_label": "hard"
+}

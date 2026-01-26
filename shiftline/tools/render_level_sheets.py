@@ -28,7 +28,9 @@ CELL = 16
 PADDING = 6
 CARD_W = GRID_W * CELL + PADDING * 2
 CARD_H = GRID_H * CELL + PADDING * 2 + 16
-SHEET_COLS = 2
+STAGE_COUNT = 10
+LEVELS_PER_STAGE = 20
+SHEET_COLS = 4
 SHEET_ROWS = 5
 SHEET_PAD = 16
 BG = (22, 30, 38)
@@ -131,9 +133,9 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     levels = load_levels()
     total = len(levels)
-    for stage in range(1, 11):
-        start = (stage - 1) * 10
-        chunk = levels[start : start + 10]
+    for stage in range(1, STAGE_COUNT + 1):
+        start = (stage - 1) * LEVELS_PER_STAGE
+        chunk = levels[start : start + LEVELS_PER_STAGE]
         sheet_w = SHEET_COLS * CARD_W + (SHEET_COLS + 1) * SHEET_PAD
         sheet_h = SHEET_ROWS * CARD_H + (SHEET_ROWS + 1) * SHEET_PAD
         sheet = Image.new("RGB", (sheet_w, sheet_h), BG)
@@ -148,7 +150,7 @@ def main() -> None:
             sheet.paste(card, (x, y))
         out_path = OUT_DIR / f"stage_{stage:02d}.png"
         sheet.save(out_path)
-    print(f"Wrote {10} sheets to {OUT_DIR}")
+    print(f"Wrote {STAGE_COUNT} sheets to {OUT_DIR}")
 
 
 if __name__ == "__main__":

@@ -2,18 +2,18 @@ Stage difficulty rules
 
 Structure
 - 10 stages total
-- 10 levels per stage
-- Within a stage: difficulty increases from level 1 to level 10
+- 20 levels per stage
+- Within a stage: difficulty increases from level 1 to level 20
 
 Stage 1 (intro)
-- Levels 1-4: easy
-- Levels 5-8: fun
-- Levels 9-10: challenging
+- Levels 1-8: easy
+- Levels 9-16: fun
+- Levels 17-20: challenging
 
 Stages 2-10
-- Levels 1-5: challenging
-- Levels 6-9: hard
-- Level 10: hard+
+- Levels 1-10: challenging
+- Levels 11-18: hard
+- Levels 19-20: hard+
 
 Global rule
 - Easy levels appear only in Stage 1.

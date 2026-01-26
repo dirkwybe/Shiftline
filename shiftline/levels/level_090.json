@@ -1,0 +1,55 @@
+{
+  "width": 8,
+  "height": 8,
+  "palette": [
+    "#3C78DC",
+    "#E65050",
+    "#50BE78",
+    "#E6C846"
+  ],
+  "walls": [
+    [
+      1,
+      1
+    ],
+    [
+      5,
+      7
+    ]
+  ],
+  "blocks": [
+    {
+      "pos": [
+        3,
+        7
+      ],
+      "color": 0
+    },
+    {
+      "pos": [
+        4,
+        7
+      ],
+      "color": 1
+    }
+  ],
+  "holes": [
+    {
+      "pos": [
+        2,
+        7
+      ],
+      "color": 0
+    },
+    {
+      "pos": [
+        4,
+        0
+      ],
+      "color": 1
+    }
+  ],
+  "bouncers": [],
+  "difficulty": 3,
+  "difficulty_label": "challenging"
+}

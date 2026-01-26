@@ -22,6 +22,9 @@ WIDTH = 8
 HEIGHT = 8
 PALETTE = ["#3C78DC", "#E65050", "#50BE78", "#E6C846"]
 RNG_SEED = 240125
+STAGE_COUNT = 10
+LEVELS_PER_STAGE = 20
+FAST_EXPAND = True
 
 MAX_STATES = 15000
 
@@ -31,6 +34,15 @@ DIFFICULTY_VALUES = {
     "challenging": 3,
     "hard": 4,
 }
+
+
+def normalize_label(label: str) -> str:
+    label = (label or "").strip().lower()
+    if label == "very easy":
+        return "easy"
+    if label == "very hard":
+        return "hard"
+    return label
 
 
 @dataclass(frozen=True)
@@ -242,6 +254,79 @@ def analyze_level(
     )
 
 
+def level_signature(level: Level) -> str:
+    walls = tuple(sorted(level.walls))
+    holes = tuple(sorted(level.holes.items()))
+    blocks = tuple(sorted(level.blocks.items()))
+    return f"W{walls}|H{holes}|B{blocks}"
+
+
+def transform_pos(pos: Tuple[int, int], variant: int) -> Tuple[int, int]:
+    x, y = pos
+    if variant == 0:  # identity
+        return x, y
+    if variant == 1:  # rot90
+        return y, WIDTH - 1 - x
+    if variant == 2:  # rot180
+        return WIDTH - 1 - x, HEIGHT - 1 - y
+    if variant == 3:  # rot270
+        return HEIGHT - 1 - y, x
+    if variant == 4:  # flip horizontal
+        return WIDTH - 1 - x, y
+    if variant == 5:  # flip vertical
+        return x, HEIGHT - 1 - y
+    if variant == 6:  # main diagonal
+        return y, x
+    # anti-diagonal
+    return WIDTH - 1 - y, HEIGHT - 1 - x
+
+
+def transform_level(level: Level, variant: int) -> Optional[Level]:
+    walls = {transform_pos(p, variant) for p in level.walls}
+    holes = {transform_pos(p, variant): c for p, c in level.holes.items()}
+    blocks = {transform_pos(p, variant): c for p, c in level.blocks.items()}
+    if any(holes.get(pos) == color for pos, color in blocks.items()):
+        return None
+    return Level(
+        walls=walls,
+        holes=holes,
+        blocks=blocks,
+        par_moves=level.par_moves,
+        par_per_block=level.par_per_block,
+        label=level.label,
+        ordering=level.ordering,
+        multi_swipe=level.multi_swipe,
+    )
+
+
+def expand_with_transforms(
+    levels: List[Level],
+    target_count: int,
+    seen: Set[str],
+    rng: random.Random,
+) -> List[Level]:
+    if len(levels) >= target_count:
+        return levels
+    variants = list(range(1, 8))
+    rng.shuffle(variants)
+    idx = 0
+    while len(levels) < target_count and idx < len(levels):
+        base = levels[idx]
+        for variant in variants:
+            transformed = transform_level(base, variant)
+            if transformed is None:
+                continue
+            signature = level_signature(transformed)
+            if signature in seen:
+                continue
+            seen.add(signature)
+            levels.append(transformed)
+            if len(levels) >= target_count:
+                break
+        idx += 1
+    return levels
+
+
 def positions_by_color(grid: Tuple[int, ...]) -> Dict[int, Tuple[int, int]]:
     out: Dict[int, Tuple[int, int]] = {}
     for y in range(HEIGHT):
@@ -327,7 +412,7 @@ def scramble_length_for(target: str) -> int:
     if target == "fun":
         return 3
     if target == "challenging":
-        return 2
+        return 3
     return 6
 
 
@@ -339,11 +424,11 @@ def generate_candidate(rng: random.Random, target: str) -> Optional[Level]:
         blocks_count = 1
         walls_count = 0
     elif target == "challenging":
-        blocks_count = 2
-        walls_count = rng.randint(1, 2)
-    else:
         blocks_count = rng.randint(2, 3)
-        walls_count = rng.randint(2, 4)
+        walls_count = rng.randint(1, 3)
+    else:
+        blocks_count = rng.randint(2, 4)
+        walls_count = rng.randint(2, 5)
 
     walls = set(random_positions(rng, walls_count, set()))
     holes = build_holes(rng, blocks_count, walls, target)
@@ -430,24 +515,35 @@ def generate_corridor_candidate(rng: random.Random, target: str, blocks_count: i
     return lvl
 
 
-def collect_levels(target_label: str, count: int, rng: random.Random) -> List[Level]:
+def collect_levels(
+    target_label: str,
+    count: int,
+    rng: random.Random,
+    seen: Set[str],
+    attempts_multiplier: int = 300,
+) -> List[Level]:
     levels: List[Level] = []
     attempts = 0
-    while len(levels) < count and attempts < count * 300:
+    while len(levels) < count and attempts < count * attempts_multiplier:
         attempts += 1
         level = generate_candidate(rng, target_label)
         if level is None:
             continue
         if level.label != target_label:
             continue
+        signature = level_signature(level)
+        if signature in seen:
+            continue
+        seen.add(signature)
         levels.append(level)
     if len(levels) < count:
         raise RuntimeError(f"Failed to generate {count} {target_label} levels after {attempts} attempts.")
     return levels
 
 
-def load_existing_levels() -> List[Level]:
+def load_existing_levels() -> Tuple[List[Level], Set[str]]:
     levels: List[Level] = []
+    signatures: Set[str] = set()
     for path in sorted(LEVELS_DIR.glob("level_*.json")):
         with path.open("r", encoding="utf-8") as f:
             data = json.load(f)
@@ -460,60 +556,224 @@ def load_existing_levels() -> List[Level]:
         lvl = analyze_level(blocks, holes, walls)
         if lvl is None:
             continue
+        signature = level_signature(lvl)
+        if signature in signatures:
+            continue
+        signatures.add(signature)
         levels.append(lvl)
-    return levels
+    return levels, signatures
+
+
+def load_existing_levels_raw() -> Tuple[List[Level], Set[str]]:
+    levels: List[Level] = []
+    signatures: Set[str] = set()
+    for path in sorted(LEVELS_DIR.glob("level_*.json")):
+        with path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        walls = {tuple(w) for w in data.get("walls", [])}
+        holes = {tuple(h["pos"]): int(h["color"]) for h in data.get("holes", [])}
+        blocks = {tuple(b["pos"]): int(b["color"]) for b in data.get("blocks", [])}
+        if any(holes.get(pos) == color for pos, color in blocks.items()):
+            continue
+        label = normalize_label(str(data.get("difficulty_label", "hard")))
+        lvl = Level(
+            walls=walls,
+            holes=holes,
+            blocks=blocks,
+            par_moves=0,
+            par_per_block=0.0,
+            label=label or "hard",
+            ordering="none",
+            multi_swipe=True,
+        )
+        signature = level_signature(lvl)
+        if signature in signatures:
+            continue
+        signatures.add(signature)
+        levels.append(lvl)
+    return levels, signatures
+
+
+def build_transforms(
+    base_levels: List[Level],
+    count: int,
+    seen: Set[str],
+    rng: random.Random,
+) -> List[Level]:
+    if count <= 0:
+        return []
+    expanded: List[Level] = []
+    variants = list(range(1, 8))
+    while len(expanded) < count:
+        progress = False
+        for base in base_levels:
+            rng.shuffle(variants)
+            for variant in variants:
+                transformed = transform_level(base, variant)
+                if transformed is None:
+                    continue
+                signature = level_signature(transformed)
+                if signature in seen:
+                    continue
+                seen.add(signature)
+                expanded.append(transformed)
+                progress = True
+                if len(expanded) >= count:
+                    break
+            if len(expanded) >= count:
+                break
+        if not progress:
+            break
+    if len(expanded) < count:
+        raise RuntimeError(f"Only generated {len(expanded)} of {count} transformed levels.")
+    return expanded
 
 
 def main() -> None:
     rng = random.Random(RNG_SEED)
 
-    existing = load_existing_levels()
+    if FAST_EXPAND:
+        existing, seen = load_existing_levels_raw()
+        easy_levels = [lvl for lvl in existing if lvl.label == "easy"]
+        fun_levels = [lvl for lvl in existing if lvl.label == "fun"]
+        challenging_levels = [lvl for lvl in existing if lvl.label == "challenging"]
+        hard_levels = [lvl for lvl in existing if lvl.label == "hard"]
+
+        easy_target = 8
+        fun_target = 8
+        challenging_target = 94
+        hard_target = 90
+
+        easy_levels = expand_with_transforms(easy_levels, easy_target, seen, rng)
+        fun_levels = expand_with_transforms(fun_levels, fun_target, seen, rng)
+        challenging_levels = expand_with_transforms(challenging_levels, challenging_target, seen, rng)
+        hard_levels = expand_with_transforms(hard_levels, hard_target, seen, rng)
+
+        def score(level: Level) -> float:
+            return float(len(level.walls) * 2 + len(level.blocks) + len(level.holes))
+
+        easy_levels = sorted(easy_levels, key=score)
+        fun_levels = sorted(fun_levels, key=score)
+        challenging_levels = sorted(challenging_levels, key=score)
+        hard_levels = sorted(hard_levels, key=score)
+
+        stage1 = easy_levels[:8] + fun_levels[:8] + challenging_levels[:4]
+        remaining_challenging = challenging_levels[4:]
+        remaining_hard = hard_levels
+
+        hard_plus = sorted(remaining_hard, key=score, reverse=True)[:18]
+        hard_pool = [lvl for lvl in remaining_hard if lvl not in hard_plus]
+
+        stages: List[List[Level]] = [stage1]
+        for stage_idx in range(2, STAGE_COUNT + 1):
+            ch = remaining_challenging[:10]
+            remaining_challenging = remaining_challenging[10:]
+            hd = hard_pool[:8]
+            hard_pool = hard_pool[8:]
+            hp_start = (stage_idx - 2) * 2
+            hp = hard_plus[hp_start : hp_start + 2]
+            stage_levels = ch + hd + hp
+            if len(stage_levels) != LEVELS_PER_STAGE:
+                raise RuntimeError(f"Stage {stage_idx} has {len(stage_levels)} levels.")
+            stages.append(stage_levels)
+
+        LEVELS_DIR.mkdir(parents=True, exist_ok=True)
+        for path in LEVELS_DIR.glob("level_*.json"):
+            path.unlink()
+        idx = 1
+        for stage_levels in stages:
+            for level in stage_levels:
+                out_path = LEVELS_DIR / f"level_{idx:03d}.json"
+                with out_path.open("w", encoding="utf-8") as f:
+                    json.dump(level.to_json(), f, indent=2)
+                idx += 1
+        print(f"Expanded to {STAGE_COUNT * LEVELS_PER_STAGE} levels with transforms.")
+        return
+
+    existing, seen = load_existing_levels()
     easy_levels = [lvl for lvl in existing if lvl.label == "easy"]
     fun_levels = [lvl for lvl in existing if lvl.label == "fun"]
     challenging_levels = [lvl for lvl in existing if lvl.label == "challenging"]
     hard_levels = [lvl for lvl in existing if lvl.label == "hard"]
 
-    easy_levels += collect_levels("easy", max(0, 4 - len(easy_levels)), rng)
-    fun_levels += collect_levels("fun", max(0, 4 - len(fun_levels)), rng)
-    challenging_levels += collect_levels("challenging", max(0, 47 - len(challenging_levels)), rng)
-    hard_levels += collect_levels("hard", max(0, 45 - len(hard_levels)), rng)
+    easy_target = 8
+    fun_target = 8
+    challenging_target = 94
+    hard_target = 90
+
+    easy_levels += collect_levels("easy", max(0, easy_target - len(easy_levels)), rng, seen)
+    fun_levels += collect_levels("fun", max(0, fun_target - len(fun_levels)), rng, seen)
+
+    challenging_base = min(challenging_target, 50)
+    hard_base = min(hard_target, 50)
+    challenging_levels += collect_levels(
+        "challenging",
+        max(0, challenging_base - len(challenging_levels)),
+        rng,
+        seen,
+        attempts_multiplier=600,
+    )
+    hard_levels += collect_levels(
+        "hard",
+        max(0, hard_base - len(hard_levels)),
+        rng,
+        seen,
+        attempts_multiplier=600,
+    )
+
+    easy_levels = expand_with_transforms(easy_levels, easy_target, seen, rng)
+    fun_levels = expand_with_transforms(fun_levels, fun_target, seen, rng)
+    challenging_levels = expand_with_transforms(challenging_levels, challenging_target, seen, rng)
+    hard_levels = expand_with_transforms(hard_levels, hard_target, seen, rng)
+
+    if len(easy_levels) < easy_target:
+        raise RuntimeError(f"Only {len(easy_levels)} easy levels available.")
+    if len(fun_levels) < fun_target:
+        raise RuntimeError(f"Only {len(fun_levels)} fun levels available.")
+    if len(challenging_levels) < challenging_target:
+        raise RuntimeError(f"Only {len(challenging_levels)} challenging levels available.")
+    if len(hard_levels) < hard_target:
+        raise RuntimeError(f"Only {len(hard_levels)} hard levels available.")
 
     # Stage 1
     stage1 = (
-        sorted(easy_levels, key=lambda l: l.par_per_block)[:4]
-        + sorted(fun_levels, key=lambda l: l.par_per_block)[:4]
-        + sorted(challenging_levels, key=lambda l: l.par_per_block)[:2]
+        sorted(easy_levels, key=lambda l: l.par_per_block)[:8]
+        + sorted(fun_levels, key=lambda l: l.par_per_block)[:8]
+        + sorted(challenging_levels, key=lambda l: l.par_per_block)[:4]
     )
 
     # Stages 2-10
-    remaining_challenging = sorted(challenging_levels[2:], key=lambda l: l.par_per_block)
+    remaining_challenging = sorted(challenging_levels[4:], key=lambda l: l.par_per_block)
     remaining_hard = sorted(hard_levels, key=lambda l: l.par_per_block)
-    hard_plus = sorted(remaining_hard, key=lambda l: l.par_per_block, reverse=True)[:9]
+    hard_plus = sorted(remaining_hard, key=lambda l: l.par_per_block, reverse=True)[:18]
     hard_pool = [lvl for lvl in remaining_hard if lvl not in hard_plus]
 
     stages: List[List[Level]] = [stage1]
-    for stage_idx in range(2, 11):
-        ch = remaining_challenging[:5]
-        remaining_challenging = remaining_challenging[5:]
-        hd = hard_pool[:4]
-        hard_pool = hard_pool[4:]
-        hp = hard_plus[stage_idx - 2 : stage_idx - 1]
+    for stage_idx in range(2, STAGE_COUNT + 1):
+        ch = remaining_challenging[:10]
+        remaining_challenging = remaining_challenging[10:]
+        hd = hard_pool[:8]
+        hard_pool = hard_pool[8:]
+        hp_start = (stage_idx - 2) * 2
+        hp = hard_plus[hp_start : hp_start + 2]
         stage_levels = ch + hd + hp
         stages.append(stage_levels)
 
     # Write levels
     LEVELS_DIR.mkdir(parents=True, exist_ok=True)
+    for path in LEVELS_DIR.glob("level_*.json"):
+        path.unlink()
     idx = 1
     for stage_idx, stage_levels in enumerate(stages, start=1):
-        if len(stage_levels) != 10:
+        if len(stage_levels) != LEVELS_PER_STAGE:
             raise RuntimeError(f"Stage {stage_idx} has {len(stage_levels)} levels.")
         for level in stage_levels:
-            out_path = LEVELS_DIR / f"level_{idx:02d}.json"
+            out_path = LEVELS_DIR / f"level_{idx:03d}.json"
             with out_path.open("w", encoding="utf-8") as f:
                 json.dump(level.to_json(), f, indent=2)
             idx += 1
 
-    print("Rebuilt 100 levels with no bouncers.")
+    print(f"Rebuilt {STAGE_COUNT * LEVELS_PER_STAGE} levels with no bouncers.")
 
 
 if __name__ == "__main__":
