@@ -1,7 +1,7 @@
 
 [config]
 name="IOSInAppPurchase"
-binary="ios-in-app-purchase.xcframework"
+binary="ios-in-app-purchase.release.xcframework"
 initialization="ios_in_app_purchase_init"
 deinitialization="ios_in_app_purchase_deinit"
 use_swift_runtime=true
