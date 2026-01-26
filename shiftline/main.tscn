@@ -29,6 +29,7 @@ sfx_win = ExtResource("4_lquwl")
 sfx_no_solution = ExtResource("5_lquwl")
 tile_texture = ExtResource("6_272bh")
 wall_texture = ExtResource("7_272bh")
+diagnostics_enabled = true
 about_text = "Shiftline is a sliding puzzle about
 matching colors and finding order.
 Made for iOS.
@@ -424,6 +425,12 @@ text = "Music"
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "Reset Progress"
+
+[node name="DiagnosticsLabel" type="Label" parent="OptionsPanel/OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = ""
+autowrap_mode = 3
 
 [node name="OptionsSpacer" type="Control" parent="OptionsPanel/OptionsLayout"]
 layout_mode = 2

@@ -91,6 +91,7 @@ const UI_GLOW_MULT := 1.08
 @export var sound_enabled := true
 @export var music_enabled := true
 @export var music_volume_db := -8.0
+@export var diagnostics_enabled := false
 @export_multiline var about_text: String = "Shiftline is a sliding puzzle about\nmatching colors and finding order.\nMade for iOS."
 @export_multiline var howto_text: String = "[center][b]How to Play[/b][/center]\n\n- Swipe a row or column to slide blocks.\n- Blocks slide until they hit a wall or another locked block.\n- Match blocks to same-colored holes to lock them.\n- Lock all blocks to win.\n\nTip: Use Hint if you get stuck."
 @export var button_font: Font
@@ -444,12 +445,14 @@ func _setup_iap() -> void:
 		iap_hint_display_price = ""
 		_update_start_panel_unlock_button()
 		_update_start_panel_restore_button()
+		_update_diagnostics_label()
 		return
 	iap_singleton = Engine.get_singleton("IOSInAppPurchase")
 	if iap_singleton == null:
 		iap_hint_display_price = ""
 		_update_start_panel_unlock_button()
 		_update_start_panel_restore_button()
+		_update_diagnostics_label()
 		return
 	var callable := Callable(self, "_on_iap_response")
 	if iap_singleton.has_signal("response") and not iap_singleton.is_connected("response", callable):
@@ -459,6 +462,7 @@ func _setup_iap() -> void:
 	_iap_restore_purchases()
 	_update_start_panel_unlock_button()
 	_update_start_panel_restore_button()
+	_update_diagnostics_label()
 
 func _iap_request(name: String, data: Dictionary) -> void:
 	if iap_singleton == null:
@@ -486,6 +490,7 @@ func _on_iap_response(response_name: String, data: Dictionary) -> void:
 						iap_hint_display_price = String(entry.get("displayPrice", ""))
 						break
 		_update_start_panel_unlock_button()
+		_update_diagnostics_label()
 	elif response_name == "purchase":
 		if String(data.get("result", "")) == "success":
 			var pid := String(data.get("productID", ""))
@@ -545,6 +550,26 @@ func _update_start_panel_restore_button() -> void:
 	restore.text = "Restore Purchases"
 	restore.disabled = (iap_singleton == null)
 
+func _update_diagnostics_label() -> void:
+	if not diagnostics_enabled:
+		return
+	if options_panel == null:
+		return
+	var diag := options_panel.get_node_or_null("OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox/DiagnosticsLabel") as Label
+	if diag == null:
+		return
+	var iap_path := "res://ios/plugins/ios-in-app-purchase/ios-in-app-purchase.gdip"
+	var iap_file := FileAccess.file_exists(iap_path)
+	var iap_loaded := iap_singleton != null
+	var music_count := music_track_paths.size()
+	diag.text = "Diagnostics:\n- IAP plugin: %s (gdip: %s)\n- Product ID: %s\n- Music tracks: %d (music %s)" % [
+		"loaded" if iap_loaded else "missing",
+		"found" if iap_file else "missing",
+		iap_hint_product_id if iap_hint_product_id.strip_edges() != "" else "(not set)",
+		music_count,
+		"on" if music_enabled else "off"
+	]
+
 func _setup_music() -> void:
 	if music_player == null:
 		return
@@ -553,26 +578,33 @@ func _setup_music() -> void:
 		music_player.finished.connect(_on_music_finished)
 	_refresh_music_tracks()
 	_start_music_if_needed()
+	_update_diagnostics_label()
 
 func _refresh_music_tracks() -> void:
 	music_tracks.clear()
 	music_track_paths.clear()
-	var dir := DirAccess.open("res://assets/music")
-	if dir == null:
-		return
-	dir.list_dir_begin()
-	var name := dir.get_next()
-	while name != "":
-		if not dir.current_is_dir():
-			var ext := name.get_extension().to_lower()
-			if ext in ["mp3", "ogg", "wav"]:
-				var path := "res://assets/music/%s" % name
-				var stream: AudioStream = load(path) as AudioStream
-				if stream != null:
-					music_tracks.append(stream)
-					music_track_paths.append(path)
-		name = dir.get_next()
-	dir.list_dir_end()
+	var dirs := ["res://assets/music", "res://music"]
+	for base in dirs:
+		var dir := DirAccess.open(base)
+		if dir == null:
+			continue
+		dir.list_dir_begin()
+		var name := dir.get_next()
+		while name != "":
+			if not dir.current_is_dir():
+				var ext := name.get_extension().to_lower()
+				if ext in ["mp3", "ogg", "wav"]:
+					var path := "%s/%s" % [base, name]
+					if music_track_paths.has(path):
+						name = dir.get_next()
+						continue
+					var stream: AudioStream = load(path) as AudioStream
+					if stream != null:
+						music_tracks.append(stream)
+						music_track_paths.append(path)
+			name = dir.get_next()
+		dir.list_dir_end()
+	_update_diagnostics_label()
 
 func _start_music_if_needed() -> void:
 	if not music_enabled:
@@ -613,6 +645,7 @@ func _on_music_toggled(pressed: bool) -> void:
 		_start_music_if_needed()
 	else:
 		_stop_music()
+	_update_diagnostics_label()
 
 func _current_day_key() -> String:
 	var date: Dictionary = Time.get_date_dict_from_system()
@@ -1018,6 +1051,13 @@ func _wire_options_panel(panel: Control) -> void:
 		if not reset.has_theme_stylebox_override("normal"):
 			_style_start_button(reset, Color8(255, 184, 107))
 
+	var diag: Label = panel.get_node_or_null("OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox/DiagnosticsLabel") as Label
+	if diag != null:
+		diag.visible = diagnostics_enabled
+		diag.add_theme_color_override("font_color", Color(1, 1, 1, 0.7))
+		diag.autowrap_mode = TextServer.AUTOWRAP_WORD
+		_update_diagnostics_label()
+
 	var home: Button = panel.get_node_or_null("OptionsHomeBar/OptionsHomeWrap/OptionsHomeButton") as Button
 	if home != null:
 		if not home.pressed.is_connected(_on_home_pressed):
@@ -1127,6 +1167,15 @@ func _ensure_options_panel() -> Control:
 	reset.pressed.connect(_on_reset_progress_pressed)
 	_style_start_button(reset, Color8(255, 184, 107))
 	vbox.add_child(reset)
+
+	var diag := Label.new()
+	diag.name = "DiagnosticsLabel"
+	diag.text = ""
+	diag.autowrap_mode = TextServer.AUTOWRAP_WORD
+	diag.add_theme_font_size_override("font_size", 16)
+	diag.add_theme_color_override("font_color", Color(1, 1, 1, 0.7))
+	diag.visible = diagnostics_enabled
+	vbox.add_child(diag)
 
 	var spacer := Control.new()
 	spacer.name = "OptionsSpacer"
@@ -3872,6 +3921,7 @@ func _load_settings() -> void:
 	var data: Dictionary = parsed
 	sound_enabled = bool(data.get("sound_enabled", true))
 	music_enabled = bool(data.get("music_enabled", true))
+	music_volume_db = float(data.get("music_volume_db", music_volume_db))
 	hints_unlocked = bool(data.get("hints_unlocked", hints_unlocked))
 	daily_hint_date = String(data.get("daily_hint_date", ""))
 	daily_hint_used = int(data.get("daily_hint_used", 0))
@@ -3890,6 +3940,7 @@ func _save_settings() -> void:
 	var data := {
 		"sound_enabled": sound_enabled,
 		"music_enabled": music_enabled,
+		"music_volume_db": music_volume_db,
 		"hints_unlocked": hints_unlocked,
 		"daily_hint_date": daily_hint_date,
 		"daily_hint_used": daily_hint_used
