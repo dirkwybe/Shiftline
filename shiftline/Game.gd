@@ -440,70 +440,68 @@ func _on_sound_toggled(pressed: bool) -> void:
 	_sync_settings_ui()
 
 func _setup_iap() -> void:
-	if not Engine.has_singleton("IOSInAppPurchase"):
+	if not Engine.has_singleton("InAppStore"):
 		iap_singleton = null
 		iap_hint_display_price = ""
 		_update_start_panel_unlock_button()
 		_update_start_panel_restore_button()
 		_update_diagnostics_label()
 		return
-	iap_singleton = Engine.get_singleton("IOSInAppPurchase")
+	iap_singleton = Engine.get_singleton("InAppStore")
 	if iap_singleton == null:
 		iap_hint_display_price = ""
 		_update_start_panel_unlock_button()
 		_update_start_panel_restore_button()
 		_update_diagnostics_label()
 		return
-	var callable := Callable(self, "_on_iap_response")
-	if iap_singleton.has_signal("response") and not iap_singleton.is_connected("response", callable):
-		iap_singleton.connect("response", callable)
-	_iap_request("startUpdateTask", {})
+	var callable := Callable(self, "_on_iap_event")
+	if iap_singleton.has_signal("in_app_store") and not iap_singleton.is_connected("in_app_store", callable):
+		iap_singleton.connect("in_app_store", callable)
+	if iap_singleton.has_method("set_auto_finish_transaction"):
+		iap_singleton.set_auto_finish_transaction(true)
 	_iap_request_products()
 	_iap_restore_purchases()
 	_update_start_panel_unlock_button()
 	_update_start_panel_restore_button()
 	_update_diagnostics_label()
 
-func _iap_request(name: String, data: Dictionary) -> void:
-	if iap_singleton == null:
-		return
-	iap_singleton.request(name, data)
-
 func _iap_request_products() -> void:
 	if iap_hint_product_id.strip_edges() == "":
 		return
-	_iap_request("products", {"productIDs": [iap_hint_product_id]})
+	if iap_singleton == null:
+		return
+	iap_singleton.request_product_info({"product_ids": [iap_hint_product_id]})
 
 func _iap_restore_purchases() -> void:
-	_iap_request("transactionCurrentEntitlements", {})
+	if iap_singleton == null:
+		return
+	iap_singleton.restore_purchases()
 
-func _on_iap_response(response_name: String, data: Dictionary) -> void:
-	if response_name == "products":
-		if String(data.get("result", "")) == "success":
-			var products: Variant = data.get("products", [])
-			if typeof(products) == TYPE_ARRAY:
-				for entry in products:
-					if typeof(entry) != TYPE_DICTIONARY:
-						continue
-					var pid := String(entry.get("id", ""))
-					if pid == iap_hint_product_id:
-						iap_hint_display_price = String(entry.get("displayPrice", ""))
-						break
-		_update_start_panel_unlock_button()
-		_update_diagnostics_label()
-	elif response_name == "purchase":
-		if String(data.get("result", "")) == "success":
-			var pid := String(data.get("productID", ""))
-			if pid == iap_hint_product_id:
-				_unlock_hints_from_iap()
-	elif response_name == "transactionCurrentEntitlements":
-		if String(data.get("result", "")) == "success":
-			var transactions: Variant = data.get("transactions", [])
-			if typeof(transactions) == TYPE_ARRAY:
-				for entry in transactions:
-					if typeof(entry) == TYPE_DICTIONARY and String(entry.get("productID", "")) == iap_hint_product_id:
-						_unlock_hints_from_iap()
-						break
+func _on_iap_event(data: Dictionary) -> void:
+	var event_type := String(data.get("type", ""))
+	match event_type:
+		"product_info":
+			if String(data.get("result", "")) == "ok":
+				var pid := String(data.get("product_id", ""))
+				if pid == iap_hint_product_id:
+					var price := String(data.get("price", ""))
+					var locale := String(data.get("price_locale", ""))
+					if price != "" and locale != "":
+						iap_hint_display_price = "%s %s" % [locale, price]
+					elif price != "":
+						iap_hint_display_price = price
+			_update_start_panel_unlock_button()
+			_update_diagnostics_label()
+		"purchase":
+			if String(data.get("result", "")) == "ok":
+				var pid := String(data.get("product_id", ""))
+				if pid == iap_hint_product_id:
+					_unlock_hints_from_iap()
+		"restore_purchases":
+			if String(data.get("result", "")) == "ok":
+				var pid := String(data.get("product_id", ""))
+				if pid == iap_hint_product_id:
+					_unlock_hints_from_iap()
 
 func _unlock_hints_from_iap() -> void:
 	if hints_unlocked:
@@ -517,13 +515,12 @@ func _on_unlock_hints_pressed() -> void:
 		return
 	if iap_singleton == null or iap_hint_product_id.strip_edges() == "":
 		return
-	_iap_request("purchase", {"productID": iap_hint_product_id})
+	iap_singleton.purchase({"product_id": iap_hint_product_id})
 
 func _on_restore_purchases_pressed() -> void:
 	if iap_singleton == null:
 		return
-	_iap_request("appStoreSync", {})
-	_iap_restore_purchases()
+	iap_singleton.restore_purchases()
 
 func _update_start_panel_unlock_button() -> void:
 	if start_panel == null:
@@ -558,23 +555,14 @@ func _update_diagnostics_label() -> void:
 	var diag := options_panel.get_node_or_null("OptionsLayout/OptionsCenter/OptionsBox/OptionsVBox/DiagnosticsLabel") as Label
 	if diag == null:
 		return
-	var iap_path := "res://ios/plugins/ios-in-app-purchase/ios-in-app-purchase.gdip"
-	var iap_flat_path := "res://ios/plugins/ios-in-app-purchase.gdip"
-	var iap_legacy_path := "res://plugins/ios-in-app-purchase/ios-in-app-purchase.gdip"
-	var iap_file := FileAccess.file_exists(iap_path)
-	var iap_flat_file := FileAccess.file_exists(iap_flat_path)
-	var iap_legacy_file := FileAccess.file_exists(iap_legacy_path)
 	var iap_loaded := iap_singleton != null
 	var music_count := music_track_paths.size()
 	var manifest_path := "res://assets/music/music_list.json"
 	var manifest_exists := FileAccess.file_exists(manifest_path)
 	var assets_music_dir := DirAccess.open("res://assets/music") != null
 	var root_music_dir := DirAccess.open("res://music") != null
-	diag.text = "Diagnostics:\n- IAP plugin: %s (gdip: %s, flat: %s, legacy: %s)\n- Product ID: %s\n- Music tracks: %d (assets: %s, root: %s, manifest: %s, music %s)" % [
+	diag.text = "Diagnostics:\n- IAP plugin: %s (InAppStore)\n- Product ID: %s\n- Music tracks: %d (assets: %s, root: %s, manifest: %s, music %s)" % [
 		"loaded" if iap_loaded else "missing",
-		"found" if iap_file else "missing",
-		"found" if iap_flat_file else "missing",
-		"found" if iap_legacy_file else "missing",
 		iap_hint_product_id if iap_hint_product_id.strip_edges() != "" else "(not set)",
 		music_count,
 		"ok" if assets_music_dir else "missing",
