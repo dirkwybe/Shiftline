@@ -181,11 +181,29 @@ var hint_uses_by_level: Dictionary = {}
 var daily_hint_date: String = ""
 var daily_hint_used := 0
 var iap_singleton: Object = null
+var iap_provider: String = ""
 var iap_hint_display_price: String = ""
 var iap_poll_timer: Timer = null
 
 func _is_ios() -> bool:
 	return OS.get_name() == "iOS"
+
+func _find_iap_singleton() -> void:
+	iap_singleton = null
+	iap_provider = ""
+	var candidates: PackedStringArray = PackedStringArray(["InAppStore", "IOSInAppPurchase", "InAppPurchase"])
+	for name in candidates:
+		if Engine.has_singleton(name):
+			iap_singleton = Engine.get_singleton(name)
+			iap_provider = name
+			return
+	var singletons: PackedStringArray = Engine.get_singleton_list()
+	for name in singletons:
+		var lower := name.to_lower()
+		if lower.find("app") != -1 and (lower.find("store") != -1 or lower.find("inapp") != -1 or lower.find("purchase") != -1):
+			iap_singleton = Engine.get_singleton(name)
+			iap_provider = name
+			return
 var music_tracks: Array = []
 var music_track_paths: Array = []
 var current_music_index := -1
@@ -446,6 +464,7 @@ func _on_sound_toggled(pressed: bool) -> void:
 func _setup_iap() -> void:
 	if not _is_ios():
 		iap_singleton = null
+		iap_provider = ""
 		iap_hint_display_price = ""
 		if iap_poll_timer != null:
 			iap_poll_timer.stop()
@@ -453,16 +472,7 @@ func _setup_iap() -> void:
 		_update_start_panel_restore_button()
 		_update_diagnostics_label()
 		return
-	if not Engine.has_singleton("InAppStore"):
-		iap_singleton = null
-		iap_hint_display_price = ""
-		if iap_poll_timer != null:
-			iap_poll_timer.stop()
-		_update_start_panel_unlock_button()
-		_update_start_panel_restore_button()
-		_update_diagnostics_label()
-		return
-	iap_singleton = Engine.get_singleton("InAppStore")
+	_find_iap_singleton()
 	if iap_singleton == null:
 		iap_hint_display_price = ""
 		if iap_poll_timer != null:
@@ -471,14 +481,24 @@ func _setup_iap() -> void:
 		_update_start_panel_restore_button()
 		_update_diagnostics_label()
 		return
-	var callable := Callable(self, "_on_iap_event")
-	if iap_singleton.has_signal("in_app_store") and not iap_singleton.is_connected("in_app_store", callable):
-		iap_singleton.connect("in_app_store", callable)
-	if iap_singleton.has_method("set_auto_finish_transaction"):
-		iap_singleton.set_auto_finish_transaction(true)
-	_ensure_iap_poll_timer()
-	_iap_request_products()
-	_iap_restore_purchases()
+	if iap_provider == "InAppStore":
+		var callable_store := Callable(self, "_on_iap_event")
+		if iap_singleton.has_signal("in_app_store") and not iap_singleton.is_connected("in_app_store", callable_store):
+			iap_singleton.connect("in_app_store", callable_store)
+		if iap_singleton.has_method("set_auto_finish_transaction"):
+			iap_singleton.set_auto_finish_transaction(true)
+		_ensure_iap_poll_timer()
+		_iap_request_products()
+		_iap_restore_purchases()
+	elif iap_provider == "IOSInAppPurchase":
+		if iap_poll_timer != null:
+			iap_poll_timer.stop()
+		var callable_plugin := Callable(self, "_on_iap_response")
+		if iap_singleton.has_signal("response") and not iap_singleton.is_connected("response", callable_plugin):
+			iap_singleton.connect("response", callable_plugin)
+		_iap_request("startUpdateTask", {})
+		_iap_request_products()
+		_iap_restore_purchases()
 	_update_start_panel_unlock_button()
 	_update_start_panel_restore_button()
 	_update_diagnostics_label()
@@ -499,6 +519,8 @@ func _ensure_iap_poll_timer() -> void:
 func _poll_iap_events() -> void:
 	if iap_singleton == null:
 		return
+	if iap_provider != "InAppStore":
+		return
 	if not iap_singleton.has_method("get_pending_event_count"):
 		return
 	while int(iap_singleton.get_pending_event_count()) > 0:
@@ -511,12 +533,51 @@ func _iap_request_products() -> void:
 		return
 	if iap_singleton == null:
 		return
-	iap_singleton.request_product_info({"product_ids": [iap_hint_product_id]})
+	if iap_provider == "InAppStore":
+		iap_singleton.request_product_info({"product_ids": [iap_hint_product_id]})
+	elif iap_provider == "IOSInAppPurchase":
+		_iap_request("products", {"productIDs": [iap_hint_product_id]})
 
 func _iap_restore_purchases() -> void:
 	if iap_singleton == null:
 		return
-	iap_singleton.restore_purchases()
+	if iap_provider == "InAppStore":
+		iap_singleton.restore_purchases()
+	elif iap_provider == "IOSInAppPurchase":
+		_iap_request("transactionCurrentEntitlements", {})
+
+func _iap_request(name: String, data: Dictionary) -> void:
+	if iap_singleton == null:
+		return
+	iap_singleton.request(name, data)
+
+func _on_iap_response(response_name: String, data: Dictionary) -> void:
+	if response_name == "products":
+		if String(data.get("result", "")) == "success":
+			var products: Variant = data.get("products", [])
+			if typeof(products) == TYPE_ARRAY:
+				for entry in products:
+					if typeof(entry) != TYPE_DICTIONARY:
+						continue
+					var pid := String(entry.get("id", ""))
+					if pid == iap_hint_product_id:
+						iap_hint_display_price = String(entry.get("displayPrice", ""))
+						break
+		_update_start_panel_unlock_button()
+		_update_diagnostics_label()
+	elif response_name == "purchase":
+		if String(data.get("result", "")) == "success":
+			var pid := String(data.get("productID", ""))
+			if pid == iap_hint_product_id:
+				_unlock_hints_from_iap()
+	elif response_name == "transactionCurrentEntitlements":
+		if String(data.get("result", "")) == "success":
+			var transactions: Variant = data.get("transactions", [])
+			if typeof(transactions) == TYPE_ARRAY:
+				for entry in transactions:
+					if typeof(entry) == TYPE_DICTIONARY and String(entry.get("productID", "")) == iap_hint_product_id:
+						_unlock_hints_from_iap()
+						break
 
 func _on_iap_event(data: Dictionary) -> void:
 	var event_type := String(data.get("type", ""))
@@ -556,12 +617,19 @@ func _on_unlock_hints_pressed() -> void:
 		return
 	if iap_singleton == null or iap_hint_product_id.strip_edges() == "":
 		return
-	iap_singleton.purchase({"product_id": iap_hint_product_id})
+	if iap_provider == "InAppStore":
+		iap_singleton.purchase({"product_id": iap_hint_product_id})
+	elif iap_provider == "IOSInAppPurchase":
+		_iap_request("purchase", {"productID": iap_hint_product_id})
 
 func _on_restore_purchases_pressed() -> void:
 	if iap_singleton == null:
 		return
-	iap_singleton.restore_purchases()
+	if iap_provider == "InAppStore":
+		iap_singleton.restore_purchases()
+	elif iap_provider == "IOSInAppPurchase":
+		_iap_request("appStoreSync", {})
+		_iap_restore_purchases()
 
 func _update_start_panel_unlock_button() -> void:
 	if start_panel == null:
@@ -603,14 +671,26 @@ func _update_diagnostics_label() -> void:
 		iap_status = "missing (not iOS)"
 	else:
 		iap_status = "loaded" if iap_loaded else "missing"
+	var provider := iap_provider if iap_provider != "" else "(none)"
+	var singletons: PackedStringArray = Engine.get_singleton_list()
+	var iap_candidates: PackedStringArray = PackedStringArray()
+	for name in singletons:
+		var lower := name.to_lower()
+		if lower.find("app") != -1 and (lower.find("store") != -1 or lower.find("inapp") != -1 or lower.find("purchase") != -1):
+			iap_candidates.append(name)
+	var candidates_text := "none"
+	if iap_candidates.size() > 0:
+		candidates_text = ", ".join(iap_candidates)
 	var music_count := music_track_paths.size()
 	var manifest_path := "res://assets/music/music_list.json"
 	var manifest_exists := FileAccess.file_exists(manifest_path)
 	var assets_music_dir := DirAccess.open("res://assets/music") != null
 	var root_music_dir := DirAccess.open("res://music") != null
-	diag.text = "Diagnostics:\n- Platform: %s\n- IAP plugin: %s (InAppStore)\n- Product ID: %s\n- Music tracks: %d (assets: %s, root: %s, manifest: %s, music %s)" % [
+	diag.text = "Diagnostics:\n- Platform: %s\n- IAP plugin: %s (%s)\n- IAP candidates: %s\n- Product ID: %s\n- Music tracks: %d (assets: %s, root: %s, manifest: %s, music %s)" % [
 		platform,
 		iap_status,
+		provider,
+		candidates_text,
 		iap_hint_product_id if iap_hint_product_id.strip_edges() != "" else "(not set)",
 		music_count,
 		"ok" if assets_music_dir else "missing",
